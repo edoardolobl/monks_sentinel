@@ -154,11 +154,11 @@ monks_sentinel/
 ## 🚀 Future Roadmap
 
 - ✅ **Module 1**: Associations & Orphaned Elements (Complete)
-- 🚧 **Module 2**: Naming Conventions (Q1 2024)
-- 🚧 **Module 3**: JavaScript Quality (Q2 2024)
-- 🚧 **Module 4**: HTML Security (Q2 2024)
-- 🔮 **Web Interface**: User-friendly dashboard (Q3 2024)
-- 🔮 **Batch Processing**: Multi-container analysis (Q3 2024)
+- 🚧 **Module 2**: Naming Conventions
+- 🚧 **Module 3**: JavaScript Quality
+- 🚧 **Module 4**: HTML Security
+- 🔮 **Web Interface**: User-friendly dashboard
+- 🔮 **Batch Processing**: Multi-container analysis
 
 ## 🤝 Contributing
 
