@@ -1,0 +1,168 @@
+# Docker Compose for GTM Quality Assurance System
+# Compatible with Docker Desktop 4.45+ and Docker Compose v2
+version: '3.9'
+
+services:
+  # Core orchestrator service
+  gtm-orchestrator:
+    build:
+      context: ./core
+      dockerfile: Dockerfile
+      # Enable BuildKit for improved performance
+      cache_from:
+        - python:3.11-slim
+    container_name: gtm-orchestrator
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONPATH=/app
+      - UVICORN_LOG_LEVEL=info
+    networks:
+      - gtm-network
+    depends_on:
+      gtm-module-associations:
+        condition: service_healthy
+    restart: unless-stopped
+    # Resource limits for production stability
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:exec,nosuid,nodev,size=100m
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+
+  # Module 1: Associations analyzer
+  gtm-module-associations:
+    build:
+      context: ./modules/module1
+      dockerfile: Dockerfile
+      cache_from:
+        - python:3.11-slim
+    container_name: gtm-module-associations
+    ports:
+      - "8001:8001"
+    environment:
+      - PYTHONPATH=/app
+      - UVICORN_LOG_LEVEL=info
+    networks:
+      - gtm-network
+    restart: unless-stopped
+    # Resource limits for production stability
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8001/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:exec,nosuid,nodev,size=50m
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+
+  # Future modules template (uncomment and modify as needed)
+  # gtm-module-naming:
+  #   build:
+  #     context: ./modules/module2
+  #     dockerfile: Dockerfile
+  #     cache_from:
+  #       - python:3.11-slim
+  #   container_name: gtm-module-naming
+  #   ports:
+  #     - "8002:8002"
+  #   environment:
+  #     - PYTHONPATH=/app
+  #     - UVICORN_LOG_LEVEL=info
+  #     - GEMINI_API_KEY=${GEMINI_API_KEY}
+  #   networks:
+  #     - gtm-network
+  #   restart: unless-stopped
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         memory: 512M
+  #         cpus: '0.5'
+  #       reservations:
+  #         memory: 256M
+  #         cpus: '0.25'
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "curl -f http://localhost:8002/health || exit 1"]
+  #     interval: 15s
+  #     timeout: 5s
+  #     retries: 5
+  #     start_period: 45s
+  #   logging:
+  #     driver: "json-file"
+  #     options:
+  #       max-size: "10m"
+  #       max-file: "3"
+  #   security_opt:
+  #     - no-new-privileges:true
+  #   read_only: true
+  #   tmpfs:
+  #     - /tmp:exec,nosuid,nodev,size=100m
+  #   cap_drop:
+  #     - ALL
+  #   cap_add:
+  #     - NET_BIND_SERVICE
+
+networks:
+  gtm-network:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: gtm-bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# Volumes for persistent data and caching
+volumes:
+  gtm-cache:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=100m,uid=1000,gid=1000

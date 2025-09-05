@@ -146,3 +146,29 @@ class GTMContainer(BaseModel):
                 references.extend(matches)
         
         return references
+
+
+# Response models for module communication
+class TestIssue(BaseModel):
+    """Standardized issue format for all test modules."""
+    type: str  # orphaned_trigger, dangling_reference, etc.
+    severity: str  # critical, medium, low
+    element: Dict[str, Any]  # The GTM element with the issue
+    message: str  # Human-readable description
+    recommendation: str  # How to fix it
+
+
+class ModuleResult(BaseModel):
+    """Standardized result format from test modules."""
+    module: str  # module name
+    status: str  # success, error
+    issues: List[TestIssue] = []
+    summary: Dict[str, int] = {}  # total_issues, critical, medium, low
+
+
+class AnalysisRequest(BaseModel):
+    """Request format sent to test modules."""
+    tags: List[Tag]
+    triggers: List[Trigger] 
+    variables: List[Variable]
+    builtin_variables: Optional[List[BuiltInVariable]] = []

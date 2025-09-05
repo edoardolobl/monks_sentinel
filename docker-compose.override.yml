@@ -1,0 +1,68 @@
+# Development overrides for docker-compose.yml
+# This file is automatically loaded by Docker Compose for local development
+version: '3.9'
+
+services:
+  gtm-orchestrator:
+    # Development-specific overrides
+    volumes:
+      - ./core:/app:delegated  # Enable hot reload for development
+    environment:
+      - PYTHONPATH=/app
+      - UVICORN_LOG_LEVEL=debug  # More verbose logging in development
+      - UVICORN_RELOAD=true
+    # Remove production security restrictions for development
+    read_only: false
+    security_opt: []
+    cap_drop: []
+    cap_add: []
+    tmpfs: []
+    # Relaxed resource limits for development
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+    # More frequent health checks in development
+    healthcheck:
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 20s
+    # Override command for hot reload
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  gtm-module-associations:
+    # Development-specific overrides
+    volumes:
+      - ./modules/module1:/app:delegated  # Enable hot reload for development
+    environment:
+      - PYTHONPATH=/app
+      - UVICORN_LOG_LEVEL=debug  # More verbose logging in development
+      - UVICORN_RELOAD=true
+    # Remove production security restrictions for development
+    read_only: false
+    security_opt: []
+    cap_drop: []
+    cap_add: []
+    tmpfs: []
+    # Relaxed resource limits for development
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+    # More frequent health checks in development
+    healthcheck:
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 20s
+    # Override command for hot reload
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001", "--reload"]

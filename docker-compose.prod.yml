@@ -1,0 +1,89 @@
+# Production configuration for GTM Quality Assurance System
+# Use: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+version: '3.9'
+
+services:
+  gtm-orchestrator:
+    # Production-specific settings
+    restart: always
+    environment:
+      - PYTHONPATH=/app
+      - UVICORN_LOG_LEVEL=warning  # Reduced logging for production
+      - UVICORN_ACCESS_LOG=false   # Disable access logs for performance
+    # Stricter resource limits for production
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+      # Production deployment settings
+      replicas: 1
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+        order: stop-first
+      rollback_config:
+        parallelism: 1
+        delay: 0s
+        failure_action: pause
+        order: stop-first
+    # Production health check settings
+    healthcheck:
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    # Production command with multiple workers
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2", "--worker-class", "uvicorn.workers.UvicornWorker"]
+
+  gtm-module-associations:
+    # Production-specific settings
+    restart: always
+    environment:
+      - PYTHONPATH=/app
+      - UVICORN_LOG_LEVEL=warning  # Reduced logging for production
+      - UVICORN_ACCESS_LOG=false   # Disable access logs for performance
+    # Stricter resource limits for production
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+      # Production deployment settings
+      replicas: 1
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+        order: stop-first
+      rollback_config:
+        parallelism: 1
+        delay: 0s
+        failure_action: pause
+        order: stop-first
+    # Production health check settings
+    healthcheck:
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    # Production command with optimized settings
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "1", "--worker-class", "uvicorn.workers.UvicornWorker"]
+
+# Production volumes with specific configurations
+volumes:
+  gtm-cache:
+    driver: local
+    driver_opts:
+      type: none
+      device: /var/lib/docker/volumes/gtm-cache
+      o: bind
+  gtm-logs:
+    driver: local

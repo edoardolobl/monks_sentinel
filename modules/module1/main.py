@@ -6,13 +6,15 @@ association analysis results using the existing models and analyzer modules.
 """
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ValidationError
 from typing import Dict, Any
 import logging
 
-from models import GTMContainer
-from associations_analyzer import analyze_gtm_associations
+# Import local models
+from models import AnalysisRequest, ModuleResult, TestIssue
+from associations_analyzer import AssociationsAnalyzer
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -25,18 +27,17 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Configure appropriately for production
+    allow_credentials=True,
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
+)
 
-class AnalysisResponse(BaseModel):
-    """Response model for analysis results."""
-    status: str
-    analysis: Dict[str, Any]
 
-
-class ErrorResponse(BaseModel):
-    """Response model for errors."""
-    status: str
-    error: str
-    detail: str
+# Response models now use shared core models - removed local definitions
 
 
 @app.get("/health")
@@ -45,75 +46,68 @@ async def health_check():
     return {"status": "healthy", "service": "gtm-associations-analyzer"}
 
 
-@app.post("/analyze/associations", response_model=AnalysisResponse)
-async def analyze_associations(gtm_data: Dict[str, Any]):
+@app.post("/analyze/associations", response_model=ModuleResult)
+async def analyze_associations(request: AnalysisRequest):
     """
     Analyze GTM container for association issues.
     
     Args:
-        gtm_data: GTM container export JSON data
+        request: AnalysisRequest with structured GTM data (tags, triggers, variables)
         
     Returns:
-        Analysis results with orphaned elements and dangling references
+        ModuleResult with standardized TestIssue objects
         
     Raises:
-        HTTPException: For invalid JSON structure or parsing errors
+        HTTPException: For processing errors
     """
     try:
-        # Parse GTM container using Pydantic model
-        container = GTMContainer(**gtm_data)
+        # Initialize analyzer with structured data from request
+        analyzer = AssociationsAnalyzer(request)
         
-        # Run associations analysis
-        analysis_results = analyze_gtm_associations(container)
+        # Run associations analysis and get standardized results
+        issues = analyzer.analyze_all()
         
-        logger.info(f"Successfully analyzed container: {container.containerVersion.container.name}")
+        # Calculate summary statistics
+        summary = {
+            "total_issues": len(issues),
+            "critical": len([i for i in issues if i.severity == "critical"]),
+            "medium": len([i for i in issues if i.severity == "medium"]),
+            "low": len([i for i in issues if i.severity == "low"])
+        }
         
-        return AnalysisResponse(
+        logger.info(f"Successfully analyzed {len(request.tags)} tags, {len(request.triggers)} triggers, {len(request.variables)} variables")
+        
+        return ModuleResult(
+            module="associations",
             status="success",
-            analysis=analysis_results
+            issues=issues,
+            summary=summary
         )
         
     except ValidationError as e:
-        # Handle Pydantic validation errors
-        error_msg = "Invalid GTM container format"
+        # Handle Pydantic validation errors in request
+        error_msg = "Invalid AnalysisRequest format"
         logger.error(f"Validation error: {e}")
         
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "status": "error",
-                "error": error_msg,
-                "detail": str(e)
-            }
-        )
-    
-    except KeyError as e:
-        # Handle missing required fields
-        error_msg = f"Missing required field: {str(e)}"
-        logger.error(f"KeyError: {e}")
-        
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "status": "error", 
-                "error": error_msg,
-                "detail": f"Required field {str(e)} not found in GTM container data"
-            }
+        return ModuleResult(
+            module="associations",
+            status="error",
+            issues=[],
+            summary={"error": error_msg, "detail": str(e)}
         )
     
     except Exception as e:
-        # Handle unexpected errors
-        error_msg = "Internal server error during analysis"
-        logger.error(f"Unexpected error: {e}")
+        # Handle analysis errors
+        error_msg = f"Analysis error: {str(e)}"
+        logger.error(f"Analysis error: {e}")
         
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "status": "error",
-                "error": error_msg,
-                "detail": str(e)
-            }
+        return ModuleResult(
+            module="associations", 
+            status="error",
+            issues=[],
+            summary={"error": error_msg}
         )
+    
 
 
 # Exception handlers for custom error responses
@@ -128,4 +122,4 @@ async def http_exception_handler(request, exc):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8001)
