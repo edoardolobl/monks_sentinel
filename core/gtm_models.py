@@ -355,7 +355,7 @@ class ModuleResult(BaseModel):
     module: str  # module name
     status: str  # success, error
     issues: List[TestIssue] = []
-    summary: Dict[str, int] = {}  # total_issues, critical, medium, low
+    summary: Dict[str, Any] = {}  # totals and module-specific metrics
 
 
 class AnalysisRequest(BaseModel):

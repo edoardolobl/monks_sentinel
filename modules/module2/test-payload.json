@@ -1,0 +1,72 @@
+{
+  "tags": [
+    {
+      "tagId": "1",
+      "name": "Google Analytics Tag",
+      "type": "ua",
+      "parameter": [],
+      "firingTriggerId": [],
+      "blockingTriggerId": [],
+      "setupTag": [],
+      "teardownTag": [],
+      "notes": "This tag tracks pageviews and events for our main website analytics using Google Analytics 4",
+      "parentFolderId": "folder1"
+    },
+    {
+      "tagId": "2",
+      "name": "Conversion Tag",
+      "type": "gcnv",
+      "parameter": [],
+      "firingTriggerId": [],
+      "blockingTriggerId": [],
+      "setupTag": [],
+      "teardownTag": [],
+      "notes": ""
+    }
+  ],
+  "triggers": [
+    {
+      "triggerId": "1",
+      "name": "All Pages Trigger",
+      "type": "pageview",
+      "customEventFilter": [],
+      "filter": [],
+      "notes": "Fires on all pageviews to track user navigation patterns",
+      "parentFolderId": "folder1"
+    },
+    {
+      "triggerId": "2",
+      "name": "Button Click",
+      "type": "click",
+      "customEventFilter": [],
+      "filter": []
+    }
+  ],
+  "variables": [
+    {
+      "variableId": "1",
+      "name": "User ID Variable",
+      "type": "jsm",
+      "parameter": [],
+      "notes": "Retrieves authenticated user ID from dataLayer for user journey tracking",
+      "parentFolderId": "folder1"
+    },
+    {
+      "variableId": "2",
+      "name": "Page Title",
+      "type": "jsm",
+      "parameter": []
+    }
+  ],
+  "builtin_variables": [],
+  "folders": [
+    {
+      "folderId": "folder1",
+      "name": "Analytics Tracking"
+    },
+    {
+      "folderId": "folder2",
+      "name": "Empty Folder"
+    }
+  ]
+}

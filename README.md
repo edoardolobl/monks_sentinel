@@ -39,10 +39,10 @@ cd modules/module1
 
 # Install and start
 pip install -r requirements.txt
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+uvicorn main:app --reload --host 0.0.0.0 --port 8001
 
 # Analyze your GTM container
-curl -X POST http://localhost:8000/analyze/associations \
+curl -X POST http://localhost:8001/analyze/associations \
   -H "Content-Type: application/json" \
   -d @your-gtm-export.json
 ```

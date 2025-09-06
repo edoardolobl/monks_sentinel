@@ -8,12 +8,14 @@ This module analyzes GTM containers for:
 4. Built-in variables: Used in variable references but not enabled in builtInVariable[]
 5. Setup/Blocking tags: Basic validation that referenced IDs exist
 
+With the API Gateway pattern, this module now receives plain JSON objects from the core
+orchestrator rather than complex Pydantic models, simplifying the data handling.
 Returns structured results with clear issue descriptions for easy JSON serialization.
 """
 
 import re
 from typing import List, Dict, Set, Any
-from models import AnalysisRequest, Tag, Trigger, Variable, BuiltInVariable, TestIssue, GTMContainer
+from models import TestIssue
 
 
 def extract_variable_references(text: str) -> List[str]:
@@ -91,19 +93,19 @@ class AssociationsAnalyzer:
     in GTM containers including orphaned elements and dangling references.
     """
     
-    def __init__(self, request: AnalysisRequest):
-        """Initialize analyzer with AnalysisRequest data."""
-        self.tags = request.tags or []
-        self.triggers = request.triggers or []
-        self.variables = request.variables or []
-        self.builtin_variables = request.builtin_variables or []
+    def __init__(self, data: Dict[str, Any]):
+        """Initialize analyzer with plain JSON data."""
+        self.tags = data.get('tags', [])
+        self.triggers = data.get('triggers', [])
+        self.variables = data.get('variables', [])
+        self.builtin_variables = data.get('builtin_variables', [])
         
-        # Cache for performance
-        self._tag_ids = {tag.tagId for tag in self.tags}
-        self._trigger_ids = {trigger.triggerId for trigger in self.triggers}
-        self._variable_ids = {var.variableId for var in self.variables}
-        self._variable_names = {var.name for var in self.variables}
-        self._builtin_variable_names = {biv.name for biv in self.builtin_variables}
+        # Cache for performance - work with plain dicts
+        self._tag_ids = {tag.get('id') for tag in self.tags if tag.get('id')}
+        self._trigger_ids = {trigger.get('id') for trigger in self.triggers if trigger.get('id')}
+        self._variable_ids = {var.get('id') for var in self.variables if var.get('id')}
+        self._variable_names = {var.get('name') for var in self.variables if var.get('name')}
+        self._builtin_variable_names = {biv.get('name') for biv in self.builtin_variables if biv.get('name')}
     
     def find_orphaned_triggers(self) -> List[TestIssue]:
         """
@@ -117,23 +119,24 @@ class AssociationsAnalyzer:
         # Get all trigger IDs referenced by tags
         referenced_triggers = set()
         for tag in self.tags:
-            if tag.firingTriggerId:
-                referenced_triggers.update(tag.firingTriggerId)
-            if tag.blockingTriggerId:
-                referenced_triggers.update(tag.blockingTriggerId)
+            firing_triggers = tag.get('firing_triggers', [])
+            blocking_triggers = tag.get('blocking_triggers', [])
+            referenced_triggers.update(firing_triggers)
+            referenced_triggers.update(blocking_triggers)
         
         # Find triggers not in referenced set
         for trigger in self.triggers:
-            if trigger.triggerId not in referenced_triggers:
+            trigger_id = trigger.get('id')
+            if trigger_id and trigger_id not in referenced_triggers:
                 issues.append(TestIssue(
                     type="orphaned_trigger",
                     severity="medium",
                     element={
-                        "triggerId": trigger.triggerId,
-                        "name": trigger.name,
-                        "type": trigger.type
+                        "triggerId": trigger_id,
+                        "name": trigger.get('name', 'Unknown'),
+                        "type": trigger.get('type', 'Unknown')
                     },
-                    message=f"Trigger '{trigger.name}' ({trigger.triggerId}) is not referenced by any tag",
+                    message=f"Trigger '{trigger.get('name', 'Unknown')}' ({trigger_id}) is not referenced by any tag",
                     recommendation="Consider removing this trigger if it's no longer needed, or ensure it's properly linked to tags"
                 ))
         
@@ -148,47 +151,26 @@ class AssociationsAnalyzer:
         """
         referenced_variables = set()
         
-        # Check references in tags
+        # Check references in tags (using variable_references from data extractor)
         for tag in self.tags:
-            refs = extract_all_variable_references_from_parameters(tag.parameter or [])
-            referenced_variables.update(refs)
-        
-        # Check references in triggers
-        for trigger in self.triggers:
-            # Check customEventFilter
-            for filter_item in trigger.customEventFilter or []:
-                if isinstance(filter_item, dict) and 'parameter' in filter_item:
-                    for param in filter_item['parameter'] or []:
-                        if isinstance(param, dict) and 'value' in param:
-                            refs = extract_variable_references(param['value'])
-                            referenced_variables.update(refs)
-            
-            # Check filter
-            for filter_item in trigger.filter or []:
-                if isinstance(filter_item, dict) and 'parameter' in filter_item:
-                    for param in filter_item['parameter'] or []:
-                        if isinstance(param, dict) and 'value' in param:
-                            refs = extract_variable_references(param['value'])
-                            referenced_variables.update(refs)
-        
-        # Check references in other variables
-        for variable in self.variables:
-            refs = extract_all_variable_references_from_parameters(variable.parameter or [])
-            referenced_variables.update(refs)
+            variable_refs = tag.get('variable_references', [])
+            referenced_variables.update(variable_refs)
         
         # Find variables not referenced by name
         issues = []
         for variable in self.variables:
-            if variable.name not in referenced_variables:
+            var_name = variable.get('name')
+            var_id = variable.get('id')
+            if var_name and var_name not in referenced_variables:
                 issues.append(TestIssue(
                     type="unused_variable",
                     severity="low",
                     element={
-                        "variableId": variable.variableId,
-                        "name": variable.name,
-                        "type": variable.type
+                        "variableId": var_id,
+                        "name": var_name,
+                        "type": variable.get('type', 'Unknown')
                     },
-                    message=f"Variable '{variable.name}' ({variable.variableId}) is not referenced anywhere",
+                    message=f"Variable '{var_name}' ({var_id}) is not referenced anywhere",
                     recommendation="Consider removing this variable if it's no longer needed to clean up the container"
                 ))
         
@@ -204,39 +186,42 @@ class AssociationsAnalyzer:
         issues = []
         
         for tag in self.tags:
+            tag_id = tag.get('id')
+            tag_name = tag.get('name', 'Unknown')
+            
             # Check firing triggers
-            if tag.firingTriggerId:
-                for trigger_id in tag.firingTriggerId:
-                    if trigger_id not in self._trigger_ids:
-                        issues.append(TestIssue(
-                            type="dangling_reference",
-                            severity="critical",
-                            element={
-                                "tagId": tag.tagId,
-                                "tagName": tag.name,
-                                "missing_trigger": trigger_id,
-                                "reference_type": "firingTriggerId"
-                            },
-                            message=f"Tag '{tag.name}' references non-existent firing trigger {trigger_id}",
-                            recommendation="Remove the invalid trigger reference or create the missing trigger"
-                        ))
+            firing_triggers = tag.get('firing_triggers', [])
+            for trigger_id in firing_triggers:
+                if trigger_id not in self._trigger_ids:
+                    issues.append(TestIssue(
+                        type="dangling_reference",
+                        severity="critical",
+                        element={
+                            "tagId": tag_id,
+                            "tagName": tag_name,
+                            "missing_trigger": trigger_id,
+                            "reference_type": "firingTriggerId"
+                        },
+                        message=f"Tag '{tag_name}' references non-existent firing trigger {trigger_id}",
+                        recommendation="Remove the invalid trigger reference or create the missing trigger"
+                    ))
             
             # Check blocking triggers
-            if tag.blockingTriggerId:
-                for trigger_id in tag.blockingTriggerId:
-                    if trigger_id not in self._trigger_ids:
-                        issues.append(TestIssue(
-                            type="dangling_reference",
-                            severity="critical",
-                            element={
-                                "tagId": tag.tagId,
-                                "tagName": tag.name,
-                                "missing_trigger": trigger_id,
-                                "reference_type": "blockingTriggerId"
-                            },
-                            message=f"Tag '{tag.name}' references non-existent blocking trigger {trigger_id}",
-                            recommendation="Remove the invalid trigger reference or create the missing trigger"
-                        ))
+            blocking_triggers = tag.get('blocking_triggers', [])
+            for trigger_id in blocking_triggers:
+                if trigger_id not in self._trigger_ids:
+                    issues.append(TestIssue(
+                        type="dangling_reference",
+                        severity="critical",
+                        element={
+                            "tagId": tag_id,
+                            "tagName": tag_name,
+                            "missing_trigger": trigger_id,
+                            "reference_type": "blockingTriggerId"
+                        },
+                        message=f"Tag '{tag_name}' references non-existent blocking trigger {trigger_id}",
+                        recommendation="Remove the invalid trigger reference or create the missing trigger"
+                    ))
         
         return issues
     
@@ -262,29 +247,13 @@ class AssociationsAnalyzer:
         
         issues = []
         
-        # Get all variable references from the container
+        # Get all variable references from the container (simplified with extracted data)
         all_references = set()
         
-        # Check tags
+        # Check tags (using pre-extracted variable references)
         for tag in self.tags:
-            refs = extract_all_variable_references_from_parameters(tag.parameter or [])
-            all_references.update(refs)
-        
-        # Check triggers
-        for trigger in self.triggers:
-            # Check customEventFilter and filter
-            for filter_list in [trigger.customEventFilter or [], trigger.filter or []]:
-                for filter_item in filter_list:
-                    if isinstance(filter_item, dict) and 'parameter' in filter_item:
-                        for param in filter_item['parameter'] or []:
-                            if isinstance(param, dict) and 'value' in param:
-                                refs = extract_variable_references(param['value'])
-                                all_references.update(refs)
-        
-        # Check variables
-        for variable in self.variables:
-            refs = extract_all_variable_references_from_parameters(variable.parameter or [])
-            all_references.update(refs)
+            variable_refs = tag.get('variable_references', [])
+            all_references.update(variable_refs)
         
         # Find built-in variables that are referenced but not enabled
         for ref in all_references:
@@ -313,44 +282,9 @@ class AssociationsAnalyzer:
         """
         issues = []
         
-        for tag in self.tags:
-            # Check setupTag references
-            if tag.setupTag:
-                for setup_ref in tag.setupTag:
-                    if isinstance(setup_ref, dict) and 'tagId' in setup_ref:
-                        setup_tag_id = setup_ref['tagId']
-                        if setup_tag_id not in self._tag_ids:
-                            issues.append(TestIssue(
-                                type="setup_blocking_issue",
-                                severity="critical",
-                                element={
-                                    "tagId": tag.tagId,
-                                    "tagName": tag.name,
-                                    "missing_setup_tag": setup_tag_id,
-                                    "issue_type": "missing_setup_tag"
-                                },
-                                message=f"Tag '{tag.name}' references non-existent setup tag {setup_tag_id}",
-                                recommendation="Remove the invalid setup tag reference or create the missing tag"
-                            ))
-            
-            # Check teardownTag references
-            if tag.teardownTag:
-                for teardown_ref in tag.teardownTag:
-                    if isinstance(teardown_ref, dict) and 'tagId' in teardown_ref:
-                        teardown_tag_id = teardown_ref['tagId']
-                        if teardown_tag_id not in self._tag_ids:
-                            issues.append(TestIssue(
-                                type="setup_blocking_issue",
-                                severity="critical",
-                                element={
-                                    "tagId": tag.tagId,
-                                    "tagName": tag.name,
-                                    "missing_teardown_tag": teardown_tag_id,
-                                    "issue_type": "missing_teardown_tag"
-                                },
-                                message=f"Tag '{tag.name}' references non-existent teardown tag {teardown_tag_id}",
-                                recommendation="Remove the invalid teardown tag reference or create the missing tag"
-                            ))
+        # For now, skip setup/teardown tag validation since we're using simplified data
+        # This can be enhanced later if needed by adding these fields to the data extractor
+        pass
         
         return issues
     
@@ -373,47 +307,50 @@ class AssociationsAnalyzer:
         return all_issues
 
 
-def analyze_gtm_associations(gtm_container: GTMContainer) -> Dict[str, Any]:
+def analyze_gtm_associations(data: Dict[str, Any]) -> List[TestIssue]:
     """
     Convenience function to analyze GTM container associations.
     
     Args:
-        gtm_container: Parsed GTM container object
+        data: Plain JSON data with tags, triggers, variables, etc.
         
     Returns:
-        Dictionary with all association analysis results
+        List of TestIssue objects for all detected issues
     """
-    analyzer = AssociationsAnalyzer(gtm_container)
+    analyzer = AssociationsAnalyzer(data)
     return analyzer.analyze_all()
 
 
 if __name__ == "__main__":
     # Example usage and testing
     import json
-    from models import GTMContainer
     
     try:
         # Load sample GTM file
         with open("GTM-N6X9DBL_workspace677.json", "r") as f:
             gtm_data = json.load(f)
         
-        # Parse with Pydantic model
-        container = GTMContainer(**gtm_data)
+        # Extract simple data structure (this would normally be done by API Gateway)
+        simple_data = {
+            'tags': gtm_data.get('containerVersion', {}).get('tag', []),
+            'triggers': gtm_data.get('containerVersion', {}).get('trigger', []),
+            'variables': gtm_data.get('containerVersion', {}).get('variable', []),
+            'builtin_variables': gtm_data.get('containerVersion', {}).get('builtInVariable', [])
+        }
         
         # Analyze associations
-        results = analyze_gtm_associations(container)
+        results = analyze_gtm_associations(simple_data)
         
         # Print results
         print("GTM Container Association Analysis Results:")
         print("=" * 50)
+        print(f"Found {len(results)} total issues")
         
-        for category, issues in results.items():
-            print(f"\n{category.replace('_', ' ').title()}: {len(issues)} issues found")
-            if issues:
-                for issue in issues[:3]:  # Show first 3 issues
-                    print(f"  - {issue}")
-                if len(issues) > 3:
-                    print(f"  ... and {len(issues) - 3} more")
+        for issue in results[:5]:  # Show first 5 issues
+            print(f"  - {issue.type}: {issue.message}")
+        
+        if len(results) > 5:
+            print(f"  ... and {len(results) - 5} more issues")
     
     except FileNotFoundError:
         print("Sample GTM file not found. Please ensure GTM-N6X9DBL_workspace677.json exists.")

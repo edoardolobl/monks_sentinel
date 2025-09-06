@@ -1,8 +1,9 @@
 """
 FastAPI application for GTM associations analysis.
 
-A simple, clean microservice that accepts GTM container exports and returns
-association analysis results using the existing models and analyzer modules.
+A simple, clean microservice that receives plain JSON data from the API Gateway
+and returns association analysis results. With the API Gateway pattern, this module
+no longer needs complex GTM schema models and works with simplified data structures.
 """
 
 from fastapi import FastAPI, HTTPException
@@ -12,8 +13,8 @@ from pydantic import BaseModel, ValidationError
 from typing import Dict, Any
 import logging
 
-# Import local models
-from models import AnalysisRequest, ModuleResult, TestIssue
+# Import only result models - no complex GTM schema needed
+from models import ModuleResult, TestIssue
 from associations_analyzer import AssociationsAnalyzer
 
 # Configure logging
@@ -47,12 +48,12 @@ async def health_check():
 
 
 @app.post("/analyze/associations", response_model=ModuleResult)
-async def analyze_associations(request: AnalysisRequest):
+async def analyze_associations(request: Dict[str, Any]):
     """
     Analyze GTM container for association issues.
     
     Args:
-        request: AnalysisRequest with structured GTM data (tags, triggers, variables)
+        request: Plain JSON with minimal data (tags, triggers, variables, builtin_variables)
         
     Returns:
         ModuleResult with standardized TestIssue objects
@@ -61,7 +62,16 @@ async def analyze_associations(request: AnalysisRequest):
         HTTPException: For processing errors
     """
     try:
-        # Initialize analyzer with structured data from request
+        # Validate that required fields are present
+        required_fields = ['tags', 'triggers', 'variables']
+        for field in required_fields:
+            if field not in request:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Missing required field: {field}"
+                )
+        
+        # Initialize analyzer with plain JSON data
         analyzer = AssociationsAnalyzer(request)
         
         # Run associations analysis and get standardized results
@@ -75,7 +85,7 @@ async def analyze_associations(request: AnalysisRequest):
             "low": len([i for i in issues if i.severity == "low"])
         }
         
-        logger.info(f"Successfully analyzed {len(request.tags)} tags, {len(request.triggers)} triggers, {len(request.variables)} variables")
+        logger.info(f"Successfully analyzed {len(request.get('tags', []))} tags, {len(request.get('triggers', []))} triggers, {len(request.get('variables', []))} variables")
         
         return ModuleResult(
             module="associations",
@@ -84,17 +94,9 @@ async def analyze_associations(request: AnalysisRequest):
             summary=summary
         )
         
-    except ValidationError as e:
-        # Handle Pydantic validation errors in request
-        error_msg = "Invalid AnalysisRequest format"
-        logger.error(f"Validation error: {e}")
-        
-        return ModuleResult(
-            module="associations",
-            status="error",
-            issues=[],
-            summary={"error": error_msg, "detail": str(e)}
-        )
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
     
     except Exception as e:
         # Handle analysis errors

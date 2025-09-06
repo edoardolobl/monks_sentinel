@@ -1,0 +1,8 @@
+{
+  "name": "governance",
+  "version": "1.0.0",
+  "specVersion": "1.0",
+  "endpoint": "http://gtm-module-governance:8002/analyze/governance",
+  "needs": ["tags", "triggers", "variables", "folders"],
+  "timeoutMs": 30000
+}

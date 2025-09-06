@@ -9,6 +9,7 @@ This FastAPI application serves as the central hub for:
 """
 
 import logging
+import os
 import uuid
 import httpx
 from typing import List, Dict, Any
@@ -18,10 +19,15 @@ from pydantic import ValidationError
 
 from gtm_models import (
     GTMContainer, 
-    AnalysisRequest, 
     ModuleResult, 
     OrchestratorResponse,
     TestIssue
+)
+from data_extractors import (
+    extract_associations_data,
+    extract_governance_data, 
+    extract_javascript_data,
+    extract_html_data
 )
 
 # Configure logging
@@ -43,12 +49,38 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Module registry - maps module names to their endpoints
+# Module registry - maps module names to their endpoints and data extractors
+# Updated for local testing with simplified data extraction
+# Endpoints are configurable via environment variables; defaults target Docker service names
 MODULE_REGISTRY = {
-    "associations": "http://gtm-module-associations:8001/analyze/associations",
-    "naming": "http://gtm-module-naming:8002/analyze/naming",
-    "javascript": "http://gtm-module-javascript:8003/analyze/javascript", 
-    "html": "http://gtm-module-html:8004/analyze/html"
+    "associations": {
+        "endpoint": os.getenv(
+            "ASSOCIATIONS_URL",
+            "http://gtm-module-associations:8001/analyze/associations",
+        ),
+        "extractor": extract_associations_data,
+    },
+    "governance": {
+        "endpoint": os.getenv(
+            "GOVERNANCE_URL",
+            "http://gtm-module-governance:8002/analyze/governance",
+        ),
+        "extractor": extract_governance_data,
+    },
+    "javascript": {
+        "endpoint": os.getenv(
+            "JAVASCRIPT_URL",
+            "http://gtm-module-javascript:8003/analyze/javascript",
+        ),
+        "extractor": extract_javascript_data,
+    },
+    "html": {
+        "endpoint": os.getenv(
+            "HTML_URL",
+            "http://gtm-module-html:8004/analyze/html",
+        ),
+        "extractor": extract_html_data,
+    },
 }
 
 # In-memory storage for analysis results (use Redis/DB in production)
@@ -169,14 +201,6 @@ async def run_analysis_modules(
         test_modules: List of module names to execute
     """
     try:
-        # Prepare data for modules
-        analysis_request = AnalysisRequest(
-            tags=gtm_container.containerVersion.tag,
-            triggers=gtm_container.containerVersion.trigger,
-            variables=gtm_container.containerVersion.variable,
-            builtin_variables=gtm_container.containerVersion.builtInVariable
-        )
-        
         results = {}
         total_summary = {"total_issues": 0, "critical": 0, "medium": 0, "low": 0}
         
@@ -190,22 +214,45 @@ async def run_analysis_modules(
                 try:
                     logger.info(f"Request {request_id}: Calling {module_name} module")
                     
-                    # Call module endpoint
+                    # Extract minimal data for this specific module
+                    module_config = MODULE_REGISTRY[module_name]
+                    extractor = module_config["extractor"]
+                    module_data = extractor(gtm_container)
+                    
+                    logger.info(f"Request {request_id}: Extracted {len(str(module_data))} chars of data for {module_name}")
+                    
+                    # Call module endpoint with minimal data
                     response = await client.post(
-                        MODULE_REGISTRY[module_name],
-                        json=analysis_request.dict(),
+                        module_config["endpoint"],
+                        json=module_data,
                         timeout=30.0
                     )
                     
                     if response.status_code == 200:
-                        module_result = ModuleResult(**response.json())
-                        results[module_name] = module_result
+                        payload = response.json()
+                        try:
+                            module_result = ModuleResult(**payload)
+                            results[module_name] = module_result
+                        except ValidationError as ve:
+                            logger.error(
+                                f"Request {request_id}: Validation error parsing {module_name} response: {ve}"
+                            )
+                            logger.error(
+                                f"Request {request_id}: Raw {module_name} payload keys: {list(payload.keys())}"
+                            )
+                            error_result = ModuleResult(
+                                module=module_name,
+                                status="error",
+                                issues=[],
+                                summary={"error": "validation_error"}
+                            )
+                            results[module_name] = error_result
                         
                         # Aggregate summary
-                        if module_result.summary:
-                            for key, value in module_result.summary.items():
-                                if key in total_summary:
-                                    total_summary[key] += value
+                        if results[module_name].summary:
+                            for key, value in results[module_name].summary.items():
+                                if key in total_summary and isinstance(value, (int, float)):
+                                    total_summary[key] += int(value)
                         
                         logger.info(f"Request {request_id}: {module_name} completed successfully")
                     else:
@@ -262,9 +309,10 @@ async def list_available_modules():
     module_status = {}
     
     async with httpx.AsyncClient() as client:
-        for module_name, endpoint in MODULE_REGISTRY.items():
+        for module_name, module_config in MODULE_REGISTRY.items():
             try:
                 # Check module health
+                endpoint = module_config["endpoint"]
                 health_url = endpoint.replace("/analyze/" + module_name.split("/")[-1], "/health")
                 response = await client.get(health_url, timeout=5.0)
                 

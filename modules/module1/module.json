@@ -1,0 +1,8 @@
+{
+  "name": "associations",
+  "version": "1.0.0",
+  "specVersion": "1.0",
+  "endpoint": "http://gtm-module-associations:8001/analyze/associations",
+  "needs": ["tags", "triggers", "variables", "builtin_variables"],
+  "timeoutMs": 30000
+}

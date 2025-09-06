@@ -26,10 +26,10 @@ cd modules/module1
 pip install -r requirements.txt
 
 # Start the API server
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+uvicorn main:app --reload --host 0.0.0.0 --port 8001
 
 # Test health check
-curl http://localhost:8000/health
+curl http://localhost:8001/health
 ```
 
 ### Basic Usage
@@ -40,7 +40,7 @@ curl http://localhost:8000/health
 
 **2. Analyze your container:**
 ```bash
-curl -X POST http://localhost:8000/analyze/associations \
+curl -X POST http://localhost:8001/analyze/associations \
   -H "Content-Type: application/json" \
   -d @your-gtm-export.json
 ```

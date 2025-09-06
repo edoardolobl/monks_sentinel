@@ -1,0 +1,50 @@
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Development files
+src/**/*.test.ts
+src/**/*.spec.ts
+**/__tests__/
+coverage/
+.nyc_output/
+
+# Build tools
+.eslintrc.js
+.eslintcache
+jest.config.js
+# tsconfig.json - needed for Docker build
+
+# Documentation
+README.md
+*.md
+
+# Environment files
+.env
+.env.*
+
+# Git
+.git/
+.gitignore
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Cache
+.cache/
+.tmp/
