@@ -1,0 +1,144 @@
+# Protocol Buffer Compilation Docker Image
+# Version: 1.0.0
+#
+# This Dockerfile creates a consistent environment for compiling protocol buffer
+# definitions across all platforms. It includes protoc and all language plugins
+# needed for the Monks Sentinel GTM Quality Assurance System.
+#
+# Usage:
+#   docker build -f Dockerfile.protoc -t gtm-protoc .
+#   docker run --rm -v $(pwd):/workspace gtm-protoc
+
+# Use official protobuf image as base (includes protoc 25.x)
+FROM bufbuild/buf:1.28.1 as buf-base
+
+# Multi-stage build for protoc compilation environment
+FROM ubuntu:22.04 as protoc-builder
+
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PROTOBUF_VERSION=25.1
+ENV GO_VERSION=1.21.5
+ENV NODE_VERSION=20.10.0
+ENV RUST_VERSION=1.75.0
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    wget \
+    unzip \
+    build-essential \
+    git \
+    python3 \
+    python3-pip \
+    python3-dev \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install protoc
+WORKDIR /tmp
+RUN wget https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOBUF_VERSION}/protoc-${PROTOBUF_VERSION}-linux-x86_64.zip \
+    && unzip protoc-${PROTOBUF_VERSION}-linux-x86_64.zip -d /usr/local \
+    && chmod +x /usr/local/bin/protoc \
+    && rm protoc-${PROTOBUF_VERSION}-linux-x86_64.zip
+
+# Install Python protobuf tools
+RUN pip3 install --no-cache-dir \
+    grpcio-tools==${PROTOBUF_VERSION}.* \
+    protobuf==${PROTOBUF_VERSION}.* \
+    mypy-protobuf
+
+# Install Go
+RUN wget https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz \
+    && tar -C /usr/local -xzf go${GO_VERSION}.linux-amd64.tar.gz \
+    && rm go${GO_VERSION}.linux-amd64.tar.gz
+
+ENV PATH="/usr/local/go/bin:${PATH}"
+
+# Install Go protobuf tools
+RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@latest \
+    && go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+# Install Node.js and npm
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs
+
+# Install Node.js protobuf tools
+RUN npm install -g \
+    ts-proto@1.165.0 \
+    @types/google-protobuf@3.15.12 \
+    google-protobuf@3.21.2 \
+    grpc-web@1.4.2 \
+    protobufjs@7.2.5
+
+# Install Rust
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain ${RUST_VERSION}
+
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Install Rust protobuf tools
+RUN cargo install protobuf-codegen@3.4.0
+
+# Copy buf from the buf-base stage
+COPY --from=buf-base /usr/local/bin/buf /usr/local/bin/buf
+
+# Create workspace directory
+WORKDIR /workspace
+
+# Copy helper scripts
+COPY scripts/generate_protobuf.sh /usr/local/bin/generate_protobuf
+RUN chmod +x /usr/local/bin/generate_protobuf
+
+# Create compilation script for Docker environment
+RUN cat > /usr/local/bin/docker-protoc << 'EOF'
+#!/bin/bash
+
+# Docker protoc compilation script
+# This script runs inside the Docker container
+
+set -euo pipefail
+
+# Colors for output
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+echo -e "${BLUE}Docker Protoc Compilation Environment${NC}"
+echo -e "${BLUE}=====================================${NC}"
+echo "protoc version: $(protoc --version)"
+echo "Go version: $(go version)"
+echo "Node.js version: $(node --version)"
+echo "npm version: $(npm --version)"
+echo "Python version: $(python3 --version)"
+echo "Rust version: $(rustc --version)"
+echo ""
+
+# Default behavior: run generate_protobuf script
+if [[ $# -eq 0 ]]; then
+    echo -e "${GREEN}Running protobuf generation for all languages${NC}"
+    exec /usr/local/bin/generate_protobuf
+else
+    # Pass through arguments to generate_protobuf
+    echo -e "${GREEN}Running protobuf generation with arguments: $*${NC}"
+    exec /usr/local/bin/generate_protobuf "$@"
+fi
+EOF
+
+RUN chmod +x /usr/local/bin/docker-protoc
+
+# Set default command
+CMD ["/usr/local/bin/docker-protoc"]
+
+# Add metadata labels
+LABEL org.opencontainers.image.title="GTM Protoc Compilation Environment"
+LABEL org.opencontainers.image.description="Docker image for compiling protocol buffers for Monks Sentinel GTM QA System"
+LABEL org.opencontainers.image.version="1.0.0"
+LABEL org.opencontainers.image.vendor="Monks Sentinel"
+LABEL org.opencontainers.image.source="https://github.com/monks-sentinel/gtm-qa-system"
+
+# Expose common ports (if needed for development)
+EXPOSE 8080 8081 8082
+
+# Health check to verify tools are working
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD protoc --version && go version && node --version && python3 --version && rustc --version || exit 1

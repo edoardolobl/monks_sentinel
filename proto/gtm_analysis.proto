@@ -1,0 +1,378 @@
+// GTM Analysis Service Protocol Buffer Schema
+// Version: 1.0.0
+//
+// This file defines the gRPC service interfaces and message types for the
+// Monks Sentinel GTM Quality Assurance System.
+//
+// Service architecture:
+// - GTMAnalysisService: Main orchestrator service
+// - Module-specific services for different analysis types
+// - Standardized request/response patterns
+// - Health checking and service discovery support
+//
+// Design principles:
+// - Language-agnostic service definitions
+// - Standardized error handling and status reporting
+// - Support for streaming and batch operations
+// - Extensible for future analysis modules
+
+syntax = "proto3";
+
+package gtm.analysis.v1;
+
+import "gtm_models.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+option go_package = "github.com/monks-sentinel/gtm-proto/analysis/v1";
+option java_package = "com.monks.sentinel.gtm.analysis.v1"; 
+option java_outer_classname = "GTMAnalysisProto";
+option csharp_namespace = "Monks.Sentinel.GTM.Analysis.V1";
+
+// ============================================================================
+// Core Analysis Messages
+// ============================================================================
+
+// TestIssue represents a standardized issue found during analysis
+// Maps to TestIssue class in gtm_models.py
+message TestIssue {
+  enum Severity {
+    SEVERITY_UNSPECIFIED = 0;
+    LOW = 1;
+    MEDIUM = 2;
+    HIGH = 3;
+    CRITICAL = 4;
+  }
+  
+  string type = 1;                           // Issue type: orphaned_trigger, dangling_reference, etc.
+  Severity severity = 2;                     // Issue severity level
+  map<string, string> element = 3;          // GTM element with the issue (JSON-like structure)
+  string message = 4;                       // Human-readable description
+  string recommendation = 5;                // How to fix the issue
+  string module = 6;                        // Module that detected the issue
+  google.protobuf.Timestamp detected_at = 7; // When the issue was detected
+  
+  reserved 8 to 20;
+}
+
+// ModuleResult represents standardized result from analysis modules
+// Maps to ModuleResult class in gtm_models.py
+message ModuleResult {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    SUCCESS = 1;
+    ERROR = 2;
+    PARTIAL = 3;                            // Partial success with some errors
+  }
+  
+  string module = 1;                        // Module name
+  Status status = 2;                        // Module execution status
+  repeated TestIssue issues = 3;            // Issues found by the module
+  map<string, int32> summary = 4;          // Totals and module-specific metrics
+  string error_message = 5;                // Error details if status is ERROR
+  google.protobuf.Timestamp started_at = 6; // When analysis started
+  google.protobuf.Timestamp completed_at = 7; // When analysis completed
+  
+  reserved 8 to 30;
+}
+
+// ============================================================================
+// Request Messages
+// ============================================================================
+
+// AnalysisRequest represents the main request for GTM analysis
+// Based on AnalysisRequest class in gtm_models.py and data extractors
+message AnalysisRequest {
+  string request_id = 1;                    // Unique request identifier
+  gtm.models.v1.GTMContainer gtm_container = 2; // Complete GTM container data
+  repeated string modules = 3;              // Specific modules to run (empty = all)
+  AnalysisOptions options = 4;              // Analysis configuration options
+  
+  reserved 5 to 20;
+}
+
+// AnalysisOptions configures analysis behavior
+message AnalysisOptions {
+  bool include_low_severity = 1;            // Include low severity issues
+  bool detailed_reporting = 2;              // Include detailed element information
+  int32 max_issues_per_module = 3;         // Limit issues per module (0 = unlimited)
+  repeated string exclude_issue_types = 4;  // Issue types to exclude
+  
+  reserved 5 to 20;
+}
+
+// Specialized request messages for different analysis types
+
+// AssociationsAnalysisRequest for Module 1: Associations & Orphaned Elements
+message AssociationsAnalysisRequest {
+  string request_id = 1;
+  repeated AssociationTag tags = 2;         // Simplified tag data
+  repeated AssociationTrigger triggers = 3; // Simplified trigger data
+  repeated AssociationVariable variables = 4; // Simplified variable data
+  repeated AssociationBuiltInVariable builtin_variables = 5; // Built-in variables
+  
+  reserved 6 to 20;
+}
+
+// Simplified tag structure for associations analysis
+message AssociationTag {
+  string id = 1;
+  string name = 2;
+  string type = 3;
+  repeated string firing_triggers = 4;
+  repeated string blocking_triggers = 5;
+  repeated string variable_references = 6;
+  
+  reserved 7 to 15;
+}
+
+// Simplified trigger structure for associations analysis
+message AssociationTrigger {
+  string id = 1;
+  string name = 2;
+  string type = 3;
+  
+  reserved 4 to 15;
+}
+
+// Simplified variable structure for associations analysis
+message AssociationVariable {
+  string id = 1;
+  string name = 2;
+  string type = 3;
+  
+  reserved 4 to 15;
+}
+
+// Simplified built-in variable structure
+message AssociationBuiltInVariable {
+  string name = 1;
+  string type = 2;
+  
+  reserved 3 to 10;
+}
+
+// GovernanceAnalysisRequest for Module 2: Naming Conventions Analysis
+message GovernanceAnalysisRequest {
+  string request_id = 1;
+  repeated GovernanceTag tags = 2;
+  repeated GovernanceTrigger triggers = 3;
+  repeated GovernanceVariable variables = 4;
+  repeated GovernanceFolder folders = 5;
+  
+  reserved 6 to 20;
+}
+
+// Governance-focused tag structure
+message GovernanceTag {
+  string id = 1;
+  string name = 2;
+  string type = 3;
+  string notes = 4;
+  string parent_folder_id = 5;
+  
+  reserved 6 to 15;
+}
+
+// Governance-focused trigger structure
+message GovernanceTrigger {
+  string id = 1;
+  string name = 2;
+  string type = 3;
+  string notes = 4;
+  string parent_folder_id = 5;
+  
+  reserved 6 to 15;
+}
+
+// Governance-focused variable structure
+message GovernanceVariable {
+  string id = 1;
+  string name = 2;
+  string type = 3;
+  string notes = 4;
+  string parent_folder_id = 5;
+  
+  reserved 6 to 15;
+}
+
+// Governance folder structure
+message GovernanceFolder {
+  string folder_id = 1;
+  string name = 2;
+  
+  reserved 3 to 10;
+}
+
+// JavaScriptAnalysisRequest for Module 3: JavaScript Quality Assessment
+message JavaScriptAnalysisRequest {
+  string request_id = 1;
+  repeated JavaScriptItem items = 2;
+  
+  reserved 3 to 20;
+}
+
+// JavaScript code item for analysis
+message JavaScriptItem {
+  string id = 1;
+  string name = 2;
+  string type = 3;                         // "tag" or "variable"
+  string element_type = 4;                 // GTM element type
+  string javascript_code = 5;              // JavaScript code content
+  
+  reserved 6 to 15;
+}
+
+// HTMLAnalysisRequest for Module 4: HTML Security Risk Analysis  
+message HTMLAnalysisRequest {
+  string request_id = 1;
+  repeated HTMLItem items = 2;
+  
+  reserved 3 to 20;
+}
+
+// HTML code item for security analysis
+message HTMLItem {
+  string id = 1;
+  string name = 2;
+  string type = 3;                         // "tag" 
+  string element_type = 4;                 // GTM element type
+  string html_code = 5;                    // HTML code content
+  
+  reserved 6 to 15;
+}
+
+// ============================================================================
+// Response Messages  
+// ============================================================================
+
+// AnalysisResponse represents the complete response from orchestrator
+// Maps to OrchestratorResponse class in gtm_models.py
+message AnalysisResponse {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    PROCESSING = 1;
+    COMPLETED = 2;
+    FAILED = 3;
+    PARTIAL = 4;                           // Some modules succeeded, others failed
+  }
+  
+  string request_id = 1;                   // Request identifier
+  Status status = 2;                       // Overall analysis status
+  map<string, string> container_info = 3;  // Container metadata (name, publicId, etc.)
+  map<string, ModuleResult> results = 4;   // Module name -> results
+  map<string, int32> summary = 5;         // Aggregated counts across modules
+  string error_message = 6;               // Overall error message if failed
+  google.protobuf.Timestamp started_at = 7; // Analysis start time
+  google.protobuf.Timestamp completed_at = 8; // Analysis completion time
+  
+  reserved 9 to 30;
+}
+
+// ============================================================================
+// Health Check Messages
+// ============================================================================
+
+// HealthRequest for service health checking
+message HealthRequest {
+  string service = 1;                      // Optional service name to check
+}
+
+// HealthResponse with service health status
+message HealthResponse {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    SERVING = 1;
+    NOT_SERVING = 2;
+    SERVICE_UNKNOWN = 3;
+  }
+  
+  Status status = 1;                       // Service health status
+  string message = 2;                      // Optional status message
+  map<string, string> metadata = 3;       // Additional health metadata
+  google.protobuf.Timestamp timestamp = 4; // Health check timestamp
+  
+  reserved 5 to 20;
+}
+
+// ============================================================================
+// Service Definitions
+// ============================================================================
+
+// Main GTM Analysis Service - Orchestrator
+service GTMAnalysisService {
+  // Perform comprehensive GTM analysis across all modules
+  rpc AnalyzeContainer(AnalysisRequest) returns (AnalysisResponse);
+  
+  // Stream analysis results as they become available
+  rpc AnalyzeContainerStreaming(AnalysisRequest) returns (stream ModuleResult);
+  
+  // Get analysis status for a request
+  rpc GetAnalysisStatus(AnalysisStatusRequest) returns (AnalysisResponse);
+  
+  // Health check
+  rpc CheckHealth(HealthRequest) returns (HealthResponse);
+  
+  // List available analysis modules
+  rpc ListModules(google.protobuf.Empty) returns (ListModulesResponse);
+}
+
+// Module 1: Associations & Orphaned Elements Analysis Service
+service AssociationsAnalysisService {
+  // Analyze associations and find orphaned elements
+  rpc AnalyzeAssociations(AssociationsAnalysisRequest) returns (ModuleResult);
+  
+  // Health check
+  rpc CheckHealth(HealthRequest) returns (HealthResponse);
+}
+
+// Module 2: Governance/Naming Conventions Analysis Service  
+service GovernanceAnalysisService {
+  // Analyze naming conventions and governance compliance
+  rpc AnalyzeGovernance(GovernanceAnalysisRequest) returns (ModuleResult);
+  
+  // Health check
+  rpc CheckHealth(HealthRequest) returns (HealthResponse);
+}
+
+// Module 3: JavaScript Quality Assessment Service
+service JavaScriptAnalysisService {
+  // Analyze JavaScript code quality and security
+  rpc AnalyzeJavaScript(JavaScriptAnalysisRequest) returns (ModuleResult);
+  
+  // Health check
+  rpc CheckHealth(HealthRequest) returns (HealthResponse);
+}
+
+// Module 4: HTML Security Risk Analysis Service
+service HTMLAnalysisService {
+  // Analyze HTML for security risks
+  rpc AnalyzeHTML(HTMLAnalysisRequest) returns (ModuleResult);
+  
+  // Health check
+  rpc CheckHealth(HealthRequest) returns (HealthResponse);
+}
+
+// ============================================================================
+// Supporting Messages
+// ============================================================================
+
+// Request to get analysis status
+message AnalysisStatusRequest {
+  string request_id = 1;
+}
+
+// Response listing available modules
+message ListModulesResponse {
+  repeated ModuleInfo modules = 1;
+  
+  message ModuleInfo {
+    string name = 1;
+    string version = 2;
+    string description = 3;
+    bool available = 4;
+    map<string, string> capabilities = 5;
+    
+    reserved 6 to 15;
+  }
+}

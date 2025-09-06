@@ -17,6 +17,14 @@ from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ValidationError
 
+# Import gRPC client and data converters
+from grpc_client import get_grpc_client, close_grpc_client, grpc_client_context
+from data_converters import (
+    dict_to_analysis_request,
+    proto_to_module_result,
+    create_error_analysis_response
+)
+
 from gtm_models import (
     GTMContainer, 
     ModuleResult, 
@@ -50,34 +58,54 @@ app.add_middleware(
 )
 
 # Module registry - maps module names to their endpoints and data extractors
-# Updated for local testing with simplified data extraction
+# Updated to support both HTTP and gRPC protocols during migration
 # Endpoints are configurable via environment variables; defaults target Docker service names
 MODULE_REGISTRY = {
     "associations": {
-        "endpoint": os.getenv(
+        "protocol": os.getenv("ASSOCIATIONS_PROTOCOL", "http"),  # http or grpc
+        "http_endpoint": os.getenv(
             "ASSOCIATIONS_URL",
             "http://gtm-module-associations:8001/analyze/associations",
+        ),
+        "grpc_target": os.getenv(
+            "ASSOCIATIONS_GRPC_TARGET",
+            "gtm-module-associations:50051"
         ),
         "extractor": extract_associations_data,
     },
     "governance": {
-        "endpoint": os.getenv(
+        "protocol": os.getenv("GOVERNANCE_PROTOCOL", "http"),
+        "http_endpoint": os.getenv(
             "GOVERNANCE_URL",
             "http://gtm-module-governance:8002/analyze/governance",
+        ),
+        "grpc_target": os.getenv(
+            "GOVERNANCE_GRPC_TARGET",
+            "gtm-module-governance:50052"
         ),
         "extractor": extract_governance_data,
     },
     "javascript": {
-        "endpoint": os.getenv(
+        "protocol": os.getenv("JAVASCRIPT_PROTOCOL", "http"),
+        "http_endpoint": os.getenv(
             "JAVASCRIPT_URL",
             "http://gtm-module-javascript:8003/analyze/javascript",
+        ),
+        "grpc_target": os.getenv(
+            "JAVASCRIPT_GRPC_TARGET",
+            "gtm-module-javascript:50053"
         ),
         "extractor": extract_javascript_data,
     },
     "html": {
-        "endpoint": os.getenv(
+        "protocol": os.getenv("HTML_PROTOCOL", "http"),
+        "http_endpoint": os.getenv(
             "HTML_URL",
             "http://gtm-module-html:8004/analyze/html",
+        ),
+        "grpc_target": os.getenv(
+            "HTML_GRPC_TARGET",
+            "gtm-module-html:50054"
         ),
         "extractor": extract_html_data,
     },
@@ -194,6 +222,7 @@ async def run_analysis_modules(
 ):
     """
     Execute selected analysis modules and aggregate results.
+    Supports both HTTP and gRPC protocols based on module configuration.
     
     Args:
         request_id: Unique request identifier
@@ -204,8 +233,14 @@ async def run_analysis_modules(
         results = {}
         total_summary = {"total_issues": 0, "critical": 0, "medium": 0, "low": 0}
         
-        # Execute each requested module
-        async with httpx.AsyncClient() as client:
+        # Initialize HTTP client for modules still using HTTP
+        http_client = httpx.AsyncClient()
+        
+        # Initialize gRPC client for modules using gRPC
+        grpc_client = await get_grpc_client()
+        
+        try:
+            # Execute each requested module
             for module_name in test_modules:
                 if module_name not in MODULE_REGISTRY:
                     logger.warning(f"Unknown module: {module_name}")
@@ -221,60 +256,45 @@ async def run_analysis_modules(
                     
                     logger.info(f"Request {request_id}: Extracted {len(str(module_data))} chars of data for {module_name}")
                     
-                    # Call module endpoint with minimal data
-                    response = await client.post(
-                        module_config["endpoint"],
-                        json=module_data,
-                        timeout=30.0
-                    )
+                    # Choose protocol based on module configuration
+                    protocol = module_config.get("protocol", "http")
                     
-                    if response.status_code == 200:
-                        payload = response.json()
-                        try:
-                            module_result = ModuleResult(**payload)
-                            results[module_name] = module_result
-                        except ValidationError as ve:
-                            logger.error(
-                                f"Request {request_id}: Validation error parsing {module_name} response: {ve}"
-                            )
-                            logger.error(
-                                f"Request {request_id}: Raw {module_name} payload keys: {list(payload.keys())}"
-                            )
-                            error_result = ModuleResult(
-                                module=module_name,
-                                status="error",
-                                issues=[],
-                                summary={"error": "validation_error"}
-                            )
-                            results[module_name] = error_result
-                        
-                        # Aggregate summary
-                        if results[module_name].summary:
-                            for key, value in results[module_name].summary.items():
-                                if key in total_summary and isinstance(value, (int, float)):
-                                    total_summary[key] += int(value)
-                        
-                        logger.info(f"Request {request_id}: {module_name} completed successfully")
+                    if protocol == "grpc":
+                        # Call via gRPC
+                        result_dict = await _call_module_via_grpc(
+                            request_id, module_name, module_config, 
+                            module_data, gtm_container, grpc_client
+                        )
                     else:
-                        # Module returned error
+                        # Call via HTTP (backward compatibility)
+                        result_dict = await _call_module_via_http(
+                            request_id, module_name, module_config, 
+                            module_data, http_client
+                        )
+                    
+                    # Convert result to ModuleResult for consistency
+                    try:
+                        module_result = ModuleResult(**result_dict)
+                        results[module_name] = module_result
+                    except ValidationError as ve:
+                        logger.error(
+                            f"Request {request_id}: Validation error parsing {module_name} response: {ve}"
+                        )
                         error_result = ModuleResult(
                             module=module_name,
                             status="error",
                             issues=[],
-                            summary={}
+                            summary={"error": "validation_error"}
                         )
                         results[module_name] = error_result
-                        logger.error(f"Request {request_id}: {module_name} returned error: {response.status_code}")
-                        
-                except httpx.TimeoutException:
-                    error_result = ModuleResult(
-                        module=module_name,
-                        status="timeout",
-                        issues=[],
-                        summary={}
-                    )
-                    results[module_name] = error_result
-                    logger.error(f"Request {request_id}: {module_name} timed out")
+                    
+                    # Aggregate summary
+                    if results[module_name].summary:
+                        for key, value in results[module_name].summary.items():
+                            if key in total_summary and isinstance(value, (int, float)):
+                                total_summary[key] += int(value)
+                    
+                    logger.info(f"Request {request_id}: {module_name} completed successfully via {protocol.upper()}")
                     
                 except Exception as e:
                     error_result = ModuleResult(
@@ -285,6 +305,10 @@ async def run_analysis_modules(
                     )
                     results[module_name] = error_result
                     logger.error(f"Request {request_id}: {module_name} error: {str(e)}")
+        
+        finally:
+            # Clean up HTTP client
+            await http_client.aclose()
         
         # Update final results
         analysis_results[request_id].results = results
@@ -298,34 +322,143 @@ async def run_analysis_modules(
         analysis_results[request_id].status = "failed"
 
 
+async def _call_module_via_grpc(
+    request_id: str, 
+    module_name: str, 
+    module_config: Dict[str, Any], 
+    module_data: Dict[str, Any], 
+    gtm_container: GTMContainer,
+    grpc_client
+) -> Dict[str, Any]:
+    """
+    Call analysis module via gRPC.
+    
+    Args:
+        request_id: Request identifier
+        module_name: Name of the module
+        module_config: Module configuration
+        module_data: Extracted data for the module
+        gtm_container: Full GTM container
+        grpc_client: gRPC client instance
+        
+    Returns:
+        Analysis result dictionary
+    """
+    try:
+        target = module_config["grpc_target"]
+        logger.info(f"Request {request_id}: Calling {module_name} via gRPC at {target}")
+        
+        # Convert data to protobuf request
+        request = dict_to_analysis_request(module_name, module_data, gtm_container)
+        
+        # Call gRPC service
+        response = await grpc_client.call_analysis_service(
+            module_name, target, request
+        )
+        
+        if response:
+            # Convert protobuf response back to dictionary
+            return proto_to_module_result(response)
+        else:
+            return create_error_analysis_response(module_name, "gRPC call failed")
+            
+    except Exception as e:
+        logger.error(f"Request {request_id}: gRPC error for {module_name}: {str(e)}")
+        return create_error_analysis_response(module_name, str(e))
+
+
+async def _call_module_via_http(
+    request_id: str, 
+    module_name: str, 
+    module_config: Dict[str, Any], 
+    module_data: Dict[str, Any],
+    http_client: httpx.AsyncClient
+) -> Dict[str, Any]:
+    """
+    Call analysis module via HTTP (backward compatibility).
+    
+    Args:
+        request_id: Request identifier
+        module_name: Name of the module
+        module_config: Module configuration
+        module_data: Extracted data for the module
+        http_client: HTTP client instance
+        
+    Returns:
+        Analysis result dictionary
+    """
+    try:
+        endpoint = module_config["http_endpoint"]
+        logger.info(f"Request {request_id}: Calling {module_name} via HTTP at {endpoint}")
+        
+        # Call module endpoint with minimal data
+        response = await http_client.post(
+            endpoint,
+            json=module_data,
+            timeout=30.0
+        )
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            return create_error_analysis_response(
+                module_name, f"HTTP {response.status_code}"
+            )
+            
+    except httpx.TimeoutException:
+        return create_error_analysis_response(module_name, "HTTP timeout")
+    except Exception as e:
+        logger.error(f"Request {request_id}: HTTP error for {module_name}: {str(e)}")
+        return create_error_analysis_response(module_name, str(e))
+
+
 @app.get("/modules")
 async def list_available_modules():
     """
     List all available analysis modules and their status.
+    Supports both HTTP and gRPC health checks.
     
     Returns:
-        Dictionary of modules and their health status
+        Dictionary of modules and their health status with protocol info
     """
-    module_status = {}
+    module_info = {}
+    grpc_client = await get_grpc_client()
     
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient() as http_client:
         for module_name, module_config in MODULE_REGISTRY.items():
+            protocol = module_config.get("protocol", "http")
+            
             try:
-                # Check module health
-                endpoint = module_config["endpoint"]
-                health_url = endpoint.replace("/analyze/" + module_name.split("/")[-1], "/health")
-                response = await client.get(health_url, timeout=5.0)
-                
-                if response.status_code == 200:
-                    module_status[module_name] = "healthy"
+                if protocol == "grpc":
+                    # Check gRPC module health
+                    target = module_config["grpc_target"]
+                    is_healthy = await grpc_client.health_check_service(module_name, target)
+                    status = "healthy" if is_healthy else "unhealthy"
                 else:
-                    module_status[module_name] = "unhealthy"
-            except:
-                module_status[module_name] = "offline"
+                    # Check HTTP module health
+                    endpoint = module_config["http_endpoint"]
+                    health_url = endpoint.replace("/analyze/" + module_name.split("/")[-1], "/health")
+                    response = await http_client.get(health_url, timeout=5.0)
+                    status = "healthy" if response.status_code == 200 else "unhealthy"
+                
+                module_info[module_name] = {
+                    "protocol": protocol,
+                    "status": status,
+                    "endpoint": module_config.get("grpc_target" if protocol == "grpc" else "http_endpoint")
+                }
+                
+            except Exception as e:
+                logger.warning(f"Health check failed for {module_name}: {str(e)}")
+                module_info[module_name] = {
+                    "protocol": protocol,
+                    "status": "offline",
+                    "endpoint": module_config.get("grpc_target" if protocol == "grpc" else "http_endpoint"),
+                    "error": str(e)
+                }
     
     return {
         "available_modules": list(MODULE_REGISTRY.keys()),
-        "status": module_status
+        "modules": module_info
     }
 
 

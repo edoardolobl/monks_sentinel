@@ -1,0 +1,26 @@
+# Protocol Buffer Dependencies
+# Use this file to install protobuf support across the entire project
+#
+# Installation:
+#   pip install -r requirements-proto.txt
+#
+# This file contains the latest stable versions as of January 2025
+
+# Core Protocol Buffer support
+protobuf==4.25.1
+
+# gRPC support for service definitions
+grpcio==1.60.0
+grpcio-tools==1.60.0
+
+# Development tools
+mypy-protobuf==3.5.0  # MyPy type stubs generation
+grpcio-status==1.60.0  # Standard gRPC status codes
+grpcio-reflection==1.60.0  # Service reflection for development
+
+# Testing and development
+grpcio-testing==1.60.0
+
+# Optional: Protobuf performance optimization
+# Uncomment if you need better performance for large messages
+# protobuf[json_format]==4.25.1

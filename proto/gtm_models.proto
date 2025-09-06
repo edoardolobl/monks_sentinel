@@ -1,0 +1,332 @@
+// GTM Models Protocol Buffer Schema
+// Version: 1.0.0
+// 
+// This file defines comprehensive GTM (Google Tag Manager) data structures
+// for the Monks Sentinel GTM Quality Assurance System.
+//
+// Design principles:
+// - Use proto3 syntax for modern language support
+// - Field numbering strategy: Core fields (1-10), Extended fields (11-50), Future fields (51-99)
+// - Version support through api_version field for evolution
+// - Comprehensive documentation for maintainability
+// - Language-agnostic design for Python, TypeScript, Go, Rust support
+
+syntax = "proto3";
+
+package gtm.models.v1;
+
+option go_package = "github.com/monks-sentinel/gtm-proto/models/v1";
+option java_package = "com.monks.sentinel.gtm.models.v1";
+option java_outer_classname = "GTMModelsProto";
+option csharp_namespace = "Monks.Sentinel.GTM.Models.V1";
+
+// Version information for API evolution
+message APIVersion {
+  string version = 1;        // Semantic version (e.g., "1.0.0")
+  int32 schema_version = 2;  // Internal schema version for compatibility
+  int64 timestamp = 3;       // Unix timestamp when this version was created
+}
+
+// Parameter represents key-value pairs used in tags and variables
+// Maps to Parameter class in gtm_models.py
+message Parameter {
+  string key = 1;                    // Parameter key (required)
+  string value = 2;                  // Parameter value (optional)
+  repeated KeyValue list = 3;        // List of key-value pairs for LIST type
+  repeated KeyValue map = 4;         // Map of key-value pairs for MAP type  
+  string type = 5;                   // Parameter type: TEMPLATE, BOOLEAN, LIST, MAP, etc.
+  
+  // Reserved for future expansion
+  reserved 6 to 10;
+}
+
+// KeyValue represents a simple key-value pair used in Parameter lists and maps
+message KeyValue {
+  string key = 1;
+  string value = 2;
+}
+
+// ConsentSettings represents privacy compliance configuration
+// Maps to ConsentSettings class in gtm_models.py
+message ConsentSettings {
+  enum ConsentStatus {
+    CONSENT_STATUS_UNSPECIFIED = 0;
+    NOT_SET = 1;
+    NEEDED = 2;
+    NOT_NEEDED = 3;
+  }
+  
+  ConsentStatus consent_status = 1;  // Privacy consent requirement
+  
+  // Reserved for future privacy compliance fields
+  reserved 2 to 10;
+}
+
+// MonitoringMetadata represents debugging and monitoring configuration
+// Maps to MonitoringMetadata class in gtm_models.py
+message MonitoringMetadata {
+  string type = 1;  // Metadata type: MAP, TEMPLATE, etc.
+  
+  // Reserved for future monitoring fields
+  reserved 2 to 10;
+}
+
+// Tag represents a GTM tag with comprehensive fields for all analysis modules
+// Maps to Tag class in gtm_models.py
+message Tag {
+  // Core tag identification (1-10)
+  string tag_id = 1;                           // GTM tag ID (required)
+  string name = 2;                             // Tag name (required) 
+  string type = 3;                             // Tag type (required)
+  repeated Parameter parameter = 4;            // Tag parameters
+  repeated string firing_trigger_id = 5;       // Firing trigger IDs
+  repeated string blocking_trigger_id = 6;     // Blocking trigger IDs
+  
+  // Advanced configuration (11-20)
+  repeated SetupTeardownTag setup_tag = 11;    // Setup tags
+  repeated SetupTeardownTag teardown_tag = 12; // Teardown tags
+  string parent_folder_id = 13;                // Parent folder for organization
+  string tag_firing_option = 14;              // ONCE_PER_EVENT, ONCE_PER_LOAD, etc.
+  ConsentSettings consent_settings = 15;       // Privacy compliance settings
+  
+  // Metadata and documentation (21-30)
+  string notes = 21;                          // Documentation and comments
+  string fingerprint = 22;                    // Version tracking fingerprint
+  MonitoringMetadata monitoring_metadata = 23; // Debugging metadata
+  string monitoring_metadata_tag_name_key = 24; // Tag name key for monitoring
+  
+  // System metadata (31-40)
+  string account_id = 31;                     // GTM account ID
+  string container_id = 32;                   // GTM container ID
+  APIVersion api_version = 33;                // API version information
+  
+  // Reserved for future expansion (41-99)
+  reserved 41 to 99;
+}
+
+// SetupTeardownTag represents setup/teardown tag configuration
+message SetupTeardownTag {
+  string tag_id = 1;           // Referenced tag ID
+  string stop_on_setup_failure = 2; // Whether to stop on setup failure
+  
+  reserved 3 to 10;
+}
+
+// Trigger represents a GTM trigger with comprehensive fields
+// Maps to Trigger class in gtm_models.py
+message Trigger {
+  // Core trigger identification (1-10)
+  string trigger_id = 1;                        // GTM trigger ID (required)
+  string name = 2;                              // Trigger name (required)
+  string type = 3;                              // Trigger type (required)
+  repeated TriggerFilter custom_event_filter = 4; // Custom event filters
+  repeated TriggerFilter filter = 5;            // General filters
+  
+  // System metadata (11-20)
+  string fingerprint = 11;                      // Version tracking fingerprint
+  string account_id = 12;                       // GTM account ID  
+  string container_id = 13;                     // GTM container ID
+  APIVersion api_version = 14;                  // API version information
+  
+  // Reserved for future expansion (21-99)
+  reserved 21 to 99;
+}
+
+// TriggerFilter represents filter conditions for triggers
+message TriggerFilter {
+  string parameter = 1;        // Filter parameter
+  string type = 2;            // Filter type
+  string value = 3;           // Filter value
+  
+  reserved 4 to 10;
+}
+
+// Variable represents a GTM variable with comprehensive fields
+// Maps to Variable class in gtm_models.py  
+message Variable {
+  // Core variable identification (1-10)
+  string variable_id = 1;                      // GTM variable ID (required)
+  string name = 2;                             // Variable name (required)
+  string type = 3;                             // Variable type (required)
+  repeated Parameter parameter = 4;            // Variable parameters
+  
+  // Configuration (11-20)
+  FormatValue format_value = 11;               // Output formatting configuration
+  
+  // System metadata (21-30)
+  string fingerprint = 21;                     // Version tracking fingerprint
+  string account_id = 22;                      // GTM account ID
+  string container_id = 23;                    // GTM container ID  
+  APIVersion api_version = 24;                 // API version information
+  
+  // Reserved for future expansion (31-99)
+  reserved 31 to 99;
+}
+
+// FormatValue represents variable output formatting configuration
+message FormatValue {
+  string conversion_type = 1;   // Type conversion configuration
+  string case_conversion = 2;   // Case conversion rules
+  
+  reserved 3 to 10;
+}
+
+// BuiltInVariable represents a GTM built-in variable
+// Maps to BuiltInVariable class in gtm_models.py
+message BuiltInVariable {
+  string type = 1;             // Built-in variable type (required)
+  string name = 2;             // Built-in variable name (required)
+  
+  // Reserved for future expansion
+  reserved 3 to 20;
+}
+
+// Folder represents a GTM folder for organizing elements
+// Maps to Folder class in gtm_models.py
+message Folder {
+  // Core folder identification (1-10)
+  string folder_id = 1;                        // GTM folder ID (required)
+  string name = 2;                             // Folder name (required)
+  
+  // System metadata (11-20)
+  string fingerprint = 11;                     // Version tracking fingerprint
+  string account_id = 12;                      // GTM account ID
+  string container_id = 13;                    // GTM container ID
+  APIVersion api_version = 14;                 // API version information
+  
+  // Reserved for future expansion (21-50)
+  reserved 21 to 50;
+}
+
+// Zone represents a GTM zone for advanced container configurations
+// Maps to Zone class in gtm_models.py
+message Zone {
+  // Core zone identification (1-10)
+  string zone_id = 1;                          // GTM zone ID (required)
+  string name = 2;                             // Zone name
+  string zone_type_id = 3;                     // Zone type identifier
+  string notes = 4;                            // Zone documentation
+  
+  // System metadata (11-20)
+  string fingerprint = 11;                     // Version tracking fingerprint
+  string account_id = 12;                      // GTM account ID
+  string container_id = 13;                    // GTM container ID
+  APIVersion api_version = 14;                 // API version information
+  
+  // Reserved for future expansion (21-50)
+  reserved 21 to 50;
+}
+
+// Template represents a custom GTM template
+// Maps to Template class in gtm_models.py
+message Template {
+  // Core template identification (1-10)
+  string template_id = 1;                      // GTM template ID (required)
+  string name = 2;                             // Template name
+  GalleryReference gallery_reference = 3;      // Gallery reference information
+  string template_data = 4;                    // Template source code
+  
+  // System metadata (11-20)
+  string fingerprint = 11;                     // Version tracking fingerprint
+  string account_id = 12;                      // GTM account ID
+  string container_id = 13;                    // GTM container ID
+  APIVersion api_version = 14;                 // API version information
+  
+  // Reserved for future expansion (21-50)
+  reserved 21 to 50;
+}
+
+// GalleryReference represents template gallery reference information
+message GalleryReference {
+  string gallery_id = 1;       // Gallery identifier
+  string version = 2;          // Template version in gallery
+  
+  reserved 3 to 10;
+}
+
+// ContainerFeatures represents container capabilities and features
+// Maps to ContainerFeatures class in gtm_models.py
+message ContainerFeatures {
+  bool support_user_permissions = 1;     // User permission support
+  bool support_environments = 2;         // Environment support
+  bool support_workspaces = 3;           // Workspace support  
+  bool support_gtag_configs = 4;         // gtag config support
+  bool support_built_in_variables = 5;   // Built-in variable support
+  bool support_clients = 6;              // Client support
+  bool support_folders = 7;              // Folder support
+  bool support_tags = 8;                 // Tag support
+  bool support_templates = 9;            // Template support
+  bool support_triggers = 10;            // Trigger support
+  bool support_variables = 11;           // Variable support
+  bool support_versions = 12;            // Version support
+  bool support_zones = 13;               // Zone support
+  bool support_transformations = 14;     // Transformation support
+  
+  // Reserved for future feature flags (15-30)
+  reserved 15 to 30;
+}
+
+// Container represents main container information with comprehensive metadata
+// Maps to Container class in gtm_models.py
+message Container {
+  // Core container identification (1-10)
+  string name = 1;                             // Container name (required)
+  string public_id = 2;                        // Public container ID (required)
+  string container_id = 3;                     // Internal container ID (required)
+  string account_id = 4;                       // GTM account ID (required)
+  
+  // Extended container information (11-20)
+  string path = 11;                            // Full GTM path
+  repeated string usage_context = 12;          // Usage contexts: WEB, IOS, ANDROID
+  string fingerprint = 13;                     // Version tracking fingerprint
+  string tag_manager_url = 14;                 // URL to GTM interface
+  ContainerFeatures features = 15;             // Container capabilities
+  repeated string tag_ids = 16;                // Associated tag IDs
+  
+  // Version information (21-30)
+  APIVersion api_version = 21;                 // API version information
+  
+  // Reserved for future expansion (31-99)
+  reserved 31 to 99;
+}
+
+// ContainerVersion represents a container version with all components
+// Maps to ContainerVersion class in gtm_models.py
+message ContainerVersion {
+  // Core version information (1-10)
+  Container container = 1;                     // Container information (required)
+  repeated Tag tag = 2;                        // Tags in this version
+  repeated Trigger trigger = 3;                // Triggers in this version
+  repeated Variable variable = 4;              // Variables in this version
+  repeated BuiltInVariable built_in_variable = 5; // Built-in variables
+  
+  // Extended components (11-20)
+  repeated Folder folder = 11;                 // Folder structure
+  repeated Zone zone = 12;                     // GTM zones
+  repeated Template template = 13;             // Custom templates
+  
+  // Version metadata (21-30)
+  string path = 21;                            // Full version path
+  string account_id = 22;                      // Account ID
+  string container_id = 23;                    // Container ID
+  string container_version_id = 24;            // Version ID
+  APIVersion api_version = 25;                 // API version information
+  
+  // Reserved for future expansion (31-99)
+  reserved 31 to 99;
+}
+
+// GTMContainer represents the root model for GTM container JSON export
+// Maps to GTMContainer class in gtm_models.py
+message GTMContainer {
+  // Core export information (1-10)
+  int32 export_format_version = 1;            // Export format version (required)
+  string export_time = 2;                     // Export timestamp (required)
+  ContainerVersion container_version = 3;      // Container version data (required)
+  
+  // API versioning (11-20)
+  APIVersion api_version = 11;                 // API version information
+  
+  // Reserved for future expansion (21-99)
+  reserved 21 to 99;
+}
