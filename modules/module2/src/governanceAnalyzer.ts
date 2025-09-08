@@ -6,7 +6,7 @@
  * 2. Folder organization quality
  * 3. Organizational best practices
  * 
- * With the API Gateway pattern, this analyzer now works with plain JSON objects
+ * With the gRPC pattern, this analyzer now works with protobuf data
  * rather than complex typed schemas, simplifying the data handling.
  */
 

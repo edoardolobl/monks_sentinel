@@ -1,7 +1,7 @@
 # Monks Sentinel 🛡️
 ### GTM Container Quality Assurance System
 
-A comprehensive, modular system for analyzing Google Tag Manager (GTM) containers to ensure health, quality, and compliance. Built with Python, FastAPI, and AI-powered analysis.
+A comprehensive, modular system for analyzing Google Tag Manager (GTM) containers to ensure health, quality, and compliance. Built with Python, gRPC, and AI-powered analysis.
 
 ## 🎯 Overview
 
@@ -37,14 +37,15 @@ Monks Sentinel
 # Navigate to Module 1
 cd modules/module1
 
-# Install and start
-pip install -r requirements.txt
-uvicorn main:app --reload --host 0.0.0.0 --port 8001
+# Start orchestrator (gRPC server)
+cd core && python main.py
 
-# Analyze your GTM container
-curl -X POST http://localhost:8001/analyze/associations \
-  -H "Content-Type: application/json" \
-  -d @your-gtm-export.json
+# Start analysis modules (in separate terminals)
+cd modules/module1 && python main.py  # Associations analyzer
+cd modules/module2 && npm start        # Governance analyzer
+
+# Test with gRPC client
+python test_grpc_pipeline.py
 ```
 
 [→ Complete Module 1 Documentation](modules/module1/README.md)
@@ -103,10 +104,10 @@ curl -X POST http://localhost:8001/analyze/associations \
 
 ## 🛠️ Technology Stack
 
-- **Backend**: Python 3.7+, FastAPI, Pydantic
+- **Backend**: Python 3.7+, gRPC, Protobuf
 - **AI Integration**: Google Gemini API (google-genai SDK)
 - **Code Analysis**: AST parsing, regex patterns
-- **Architecture**: Microservices, REST APIs
+- **Architecture**: Microservices, gRPC APIs
 - **Deployment**: Docker-ready, cloud-native
 
 ## 📁 Project Structure
@@ -118,8 +119,7 @@ monks_sentinel/
 ├── modules/
 │   └── module1/                 # Associations analyzer
 │       ├── README.md            # Module 1 documentation
-│       ├── main.py              # FastAPI application
-│       ├── models.py            # Pydantic data models
+│       ├── main.py              # gRPC server
 │       ├── associations_analyzer.py # Core analysis logic
 │       └── requirements.txt     # Dependencies
 └── GTM-N6X9DBL_workspace677.json # Sample GTM export

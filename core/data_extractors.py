@@ -1,5 +1,5 @@
 """
-Data extractors for the API Gateway pattern.
+Data extractors for the gRPC orchestrator pattern.
 
 This module extracts minimal, focused data subsets from the complex GTM container
 for each analysis module. This eliminates the need for modules to understand

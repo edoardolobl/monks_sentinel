@@ -1,7 +1,7 @@
 /**
  * TypeScript models for GTM governance analysis responses.
  * 
- * With the API Gateway pattern, modules now receive plain JSON and only need
+ * With the gRPC pattern, modules now receive protobuf data and only need
  * to define their response formats for communication back to the core orchestrator.
  * Removed all legacy GTM schema definitions as they are now handled by the core.
  */
