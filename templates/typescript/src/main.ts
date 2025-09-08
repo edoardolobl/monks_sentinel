@@ -1,19 +1,24 @@
 /**
- * gRPC Server for GTM governance and documentation analysis.
+ * gRPC Server for GTM {MODULE_NAME} analysis.
  * 
- * A TypeScript microservice that implements the GovernanceAnalysisService
+ * A TypeScript microservice template that implements a GTM analysis service
  * using gRPC protocol for high-performance, language-agnostic communication.
  * 
- * Runs on port 50052 as part of the pure gRPC microservice architecture.
+ * Template placeholders:
+ * - {MODULE_NAME}: Module name (e.g., "governance", "javascript", "security")
+ * - {SERVICE_NAME}: Service class name (e.g., "JavascriptAnalysisService")
+ * - {ANALYZER_CLASS}: Analyzer class name (e.g., "JavascriptAnalyzer")
+ * - {REQUEST_TYPE}: gRPC request type (e.g., "JavascriptAnalysisRequest")
+ * - {PORT}: gRPC server port (e.g., 50052, 50053, 50054)
  */
 
 import * as grpc from '@grpc/grpc-js';
 import * as winston from 'winston';
-import { GovernanceAnalysisServiceService, IGovernanceAnalysisServiceServer } from '../generated/gtm_analysis_grpc_pb';
+import { {SERVICE_NAME}Service, I{SERVICE_NAME}Server } from '../generated/gtm_analysis_grpc_pb';
 import * as gtm_analysis_pb from '../generated/gtm_analysis_pb';
 import * as google_protobuf_timestamp_pb from 'google-protobuf/google/protobuf/timestamp_pb';
-import { GovernanceAnalyzer } from './governanceAnalyzer';
-import { AnalysisRequest } from './models';
+import { {ANALYZER_CLASS} } from './{MODULE_NAME}Analyzer';
+import { AnalysisRequest, TestIssue } from './models';
 
 // Configure Winston logger for gRPC server
 const logger = winston.createLogger({
@@ -36,35 +41,22 @@ const logger = winston.createLogger({
 });
 
 // Helper function to convert internal AnalysisRequest to gRPC message types
-function convertToInternalRequest(grpcRequest: gtm_analysis_pb.GovernanceAnalysisRequest): AnalysisRequest {
+function convertToInternalRequest(grpcRequest: gtm_analysis_pb.{REQUEST_TYPE}): AnalysisRequest {
+  // TODO: Customize this conversion based on your specific request structure
+  // This is a template - modify according to your {REQUEST_TYPE} fields
   return {
-    tags: grpcRequest.getTagsList().map(tag => ({
-      id: tag.getId(),
-      name: tag.getName(),
-      notes: tag.getNotes(),
-      parentFolderId: tag.getParentFolderId(),
-    })),
-    triggers: grpcRequest.getTriggersList().map(trigger => ({
-      id: trigger.getId(),
-      name: trigger.getName(),
-      notes: trigger.getNotes(),
-      parentFolderId: trigger.getParentFolderId(),
-    })),
-    variables: grpcRequest.getVariablesList().map(variable => ({
-      id: variable.getId(),
-      name: variable.getName(),
-      notes: variable.getNotes(),
-      parentFolderId: variable.getParentFolderId(),
-    })),
-    folders: grpcRequest.getFoldersList().map(folder => ({
-      folderId: folder.getFolderId(),
-      name: folder.getName(),
-    })),
-  };
+    // Example conversions - replace with your actual fields:
+    // tags: grpcRequest.getTagsList().map(tag => ({
+    //   id: tag.getId(),
+    //   name: tag.getName(),
+    //   type: tag.getType(),
+    // })),
+    // Add your specific field conversions here
+  } as AnalysisRequest;
 }
 
 // Helper function to convert internal issues to gRPC TestIssue messages
-function convertToGrpcTestIssue(issue: any): gtm_analysis_pb.TestIssue {
+function convertToGrpcTestIssue(issue: TestIssue): gtm_analysis_pb.TestIssue {
   const grpcIssue = new gtm_analysis_pb.TestIssue();
   grpcIssue.setType(issue.type);
   
@@ -72,6 +64,9 @@ function convertToGrpcTestIssue(issue: any): gtm_analysis_pb.TestIssue {
   switch (issue.severity) {
     case 'critical':
       grpcIssue.setSeverity(gtm_analysis_pb.TestIssue.Severity.CRITICAL);
+      break;
+    case 'high':
+      grpcIssue.setSeverity(gtm_analysis_pb.TestIssue.Severity.HIGH);
       break;
     case 'medium':
       grpcIssue.setSeverity(gtm_analysis_pb.TestIssue.Severity.MEDIUM);
@@ -91,7 +86,7 @@ function convertToGrpcTestIssue(issue: any): gtm_analysis_pb.TestIssue {
   
   grpcIssue.setMessage(issue.message || '');
   grpcIssue.setRecommendation(issue.recommendation || '');
-  grpcIssue.setModule('governance');
+  grpcIssue.setModule('{MODULE_NAME}');
   
   const timestamp = new google_protobuf_timestamp_pb.Timestamp();
   const now = new Date();
@@ -102,10 +97,11 @@ function convertToGrpcTestIssue(issue: any): gtm_analysis_pb.TestIssue {
   return grpcIssue;
 }
 
-// Implement the GovernanceAnalysisService server
-class GovernanceAnalysisServiceImpl implements IGovernanceAnalysisServiceServer {
+// Implement the {SERVICE_NAME} server
+class {SERVICE_NAME}ServiceImpl implements I{SERVICE_NAME}Server {
   // Index signature to satisfy the gRPC interface
   [method: string]: any;
+
   // Health check implementation
   checkHealth: grpc.handleUnaryCall<gtm_analysis_pb.HealthRequest, gtm_analysis_pb.HealthResponse> = (
     call,
@@ -115,11 +111,12 @@ class GovernanceAnalysisServiceImpl implements IGovernanceAnalysisServiceServer 
     
     const response = new gtm_analysis_pb.HealthResponse();
     response.setStatus(gtm_analysis_pb.HealthResponse.Status.SERVING);
-    response.setMessage('GTM Governance Analyzer is healthy');
+    response.setMessage('GTM {MODULE_NAME.title()} Analyzer is healthy');
     
     const metadataMap = response.getMetadataMap();
-    metadataMap.set('service', 'gtm-governance-analyzer');
+    metadataMap.set('service', 'gtm-{MODULE_NAME}-analyzer');
     metadataMap.set('version', '1.0.0');
+    metadataMap.set('module', '{MODULE_NAME}');
     
     const timestamp = new google_protobuf_timestamp_pb.Timestamp();
     const now = new Date();
@@ -130,21 +127,21 @@ class GovernanceAnalysisServiceImpl implements IGovernanceAnalysisServiceServer 
     callback(null, response);
   };
 
-  // Main governance analysis implementation
-  analyzeGovernance: grpc.handleUnaryCall<gtm_analysis_pb.GovernanceAnalysisRequest, gtm_analysis_pb.ModuleResult> = (
+  // Main analysis implementation
+  analyze{MODULE_NAME.charAt(0).toUpperCase() + MODULE_NAME.slice(1)}: grpc.handleUnaryCall<gtm_analysis_pb.{REQUEST_TYPE}, gtm_analysis_pb.ModuleResult> = (
     call,
     callback
   ) => {
     try {
-      logger.info('Starting governance analysis via gRPC');
+      logger.info('Starting {MODULE_NAME} analysis via gRPC');
       
       // Convert gRPC request to internal format
       const analysisRequest = convertToInternalRequest(call.request);
       
       // Initialize analyzer with converted request data
-      const analyzer = new GovernanceAnalyzer(analysisRequest, logger);
+      const analyzer = new {ANALYZER_CLASS}(analysisRequest, logger);
       
-      // Run governance analysis and get standardized results
+      // Run analysis and get standardized results
       const issues = analyzer.analyzeAll();
       
       // Convert issues to gRPC format
@@ -154,13 +151,14 @@ class GovernanceAnalysisServiceImpl implements IGovernanceAnalysisServiceServer 
       const summary = {
         total_issues: issues.length,
         critical: issues.filter(i => i.severity === 'critical').length,
+        high: issues.filter(i => i.severity === 'high').length,
         medium: issues.filter(i => i.severity === 'medium').length,
         low: issues.filter(i => i.severity === 'low').length,
       };
       
       // Create gRPC response
       const response = new gtm_analysis_pb.ModuleResult();
-      response.setModule('governance');
+      response.setModule('{MODULE_NAME}');
       response.setStatus(gtm_analysis_pb.ModuleResult.Status.SUCCESS);
       response.setIssuesList(grpcIssues);
       
@@ -180,8 +178,7 @@ class GovernanceAnalysisServiceImpl implements IGovernanceAnalysisServiceServer 
       response.setCompletedAt(timestamp);
       
       logger.info(
-        `Governance analysis completed: ${analysisRequest.tags.length} tags, ` +
-        `${analysisRequest.triggers.length} triggers, ${analysisRequest.variables.length} variables analyzed`
+        `{MODULE_NAME.title()} analysis completed: ${issues.length} issues found`
       );
       
       callback(null, response);
@@ -191,7 +188,7 @@ class GovernanceAnalysisServiceImpl implements IGovernanceAnalysisServiceServer 
       
       // Create error response
       const response = new gtm_analysis_pb.ModuleResult();
-      response.setModule('governance');
+      response.setModule('{MODULE_NAME}');
       response.setStatus(gtm_analysis_pb.ModuleResult.Status.ERROR);
       response.setErrorMessage(error instanceof Error ? error.message : 'Unknown error');
       response.setIssuesList([]);
@@ -215,8 +212,8 @@ class GovernanceAnalysisServiceImpl implements IGovernanceAnalysisServiceServer 
 function createServer(): grpc.Server {
   const server = new grpc.Server();
   
-  // Add the GovernanceAnalysisService implementation
-  server.addService(GovernanceAnalysisServiceService, new GovernanceAnalysisServiceImpl());
+  // Add the {SERVICE_NAME} implementation
+  server.addService({SERVICE_NAME}Service, new {SERVICE_NAME}ServiceImpl());
   
   return server;
 }
@@ -249,7 +246,7 @@ const gracefulShutdown = async (signal: string, server: grpc.Server) => {
 const start = async (): Promise<void> => {
   try {
     const server = createServer();
-    const port = parseInt(process.env.PORT || '50052', 10);
+    const port = parseInt(process.env.PORT || '{PORT}', 10);
     const host = process.env.HOST || '0.0.0.0';
     const address = `${host}:${port}`;
     
@@ -263,7 +260,7 @@ const start = async (): Promise<void> => {
           process.exit(1);
         }
         
-        logger.info(`GTM Governance Analyzer gRPC server running on ${address} (port: ${boundPort})`);
+        logger.info(`GTM {MODULE_NAME.title()} Analyzer gRPC server running on ${address} (port: ${boundPort})`);
         server.start();
       }
     );

@@ -6,28 +6,22 @@
  * Removed all legacy GTM schema definitions as they are now handled by the core.
  */
 
-import { z } from 'zod';
+// Response models for module communication (converted from zod to plain TypeScript)
+export interface TestIssue {
+  type: string; // missing_documentation, empty_folder, etc.
+  severity: 'critical' | 'medium' | 'low';
+  element: Record<string, any>; // The GTM element with the issue
+  message: string; // Human-readable description
+  recommendation: string; // How to fix it
+}
 
-// Response models for module communication
-export const TestIssueSchema = z.object({
-  type: z.string(), // missing_documentation, empty_folder, etc.
-  severity: z.enum(['critical', 'medium', 'low']),
-  element: z.record(z.any()), // The GTM element with the issue
-  message: z.string(), // Human-readable description
-  recommendation: z.string(), // How to fix it
-});
-
-export type TestIssue = z.infer<typeof TestIssueSchema>;
-
-// Module result schema for governance module responses
-export const ModuleResultSchema = z.object({
-  module: z.string(), // "governance"
-  status: z.enum(['success', 'error']),
-  issues: z.array(TestIssueSchema).default([]),
-  summary: z.record(z.union([z.number(), z.string()])).default({}), // total_issues, critical, medium, low, error messages
-});
-
-export type ModuleResult = z.infer<typeof ModuleResultSchema>;
+// Module result interface for governance module responses
+export interface ModuleResult {
+  module: string; // "governance"
+  status: 'success' | 'error';
+  issues: TestIssue[];
+  summary: Record<string, number | string>; // total_issues, critical, medium, low, error messages
+}
 
 // Analysis request interface for type safety
 export interface AnalysisRequest {

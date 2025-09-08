@@ -304,6 +304,9 @@ service GTMAnalysisService {
   // Perform comprehensive GTM analysis across all modules
   rpc AnalyzeContainer(AnalysisRequest) returns (AnalysisResponse);
   
+  // Upload GTM file and analyze with streaming file upload support
+  rpc UploadAndAnalyze(stream FileUploadRequest) returns (AnalysisResponse);
+  
   // Stream analysis results as they become available
   rpc AnalyzeContainerStreaming(AnalysisRequest) returns (stream ModuleResult);
   
@@ -360,6 +363,29 @@ service HTMLAnalysisService {
 // Request to get analysis status
 message AnalysisStatusRequest {
   string request_id = 1;
+}
+
+// File upload request for streaming file uploads
+message FileUploadRequest {
+  oneof request {
+    FileMetadata metadata = 1;       // First message with file metadata
+    bytes chunk_data = 2;           // Subsequent messages with file chunks
+    AnalysisConfig config = 3;      // Final message with analysis configuration
+  }
+  
+  // File metadata sent in first message
+  message FileMetadata {
+    string filename = 1;            // Original filename
+    int64 file_size = 2;           // Total file size in bytes
+    string content_type = 3;        // MIME type (should be application/json)
+    string request_id = 4;          // Unique request identifier
+  }
+  
+  // Analysis configuration sent in final message
+  message AnalysisConfig {
+    repeated string selected_modules = 1;  // Modules to run
+    AnalysisOptions options = 2;           // Analysis options
+  }
 }
 
 // Response listing available modules

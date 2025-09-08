@@ -1,7 +1,7 @@
 {
-  "name": "@monks-sentinel/gtm-governance-module",
+  "name": "@monks-sentinel/gtm-{MODULE_NAME}-module",
   "version": "1.0.0",
-  "description": "GTM Governance Analysis Module - gRPC TypeScript Implementation",
+  "description": "GTM {MODULE_NAME.title()} Analysis Module - gRPC TypeScript Implementation",
   "main": "dist/main.js",
   "types": "dist/main.d.ts",
   "scripts": {
@@ -21,11 +21,11 @@
   "keywords": [
     "gtm",
     "google-tag-manager",
-    "governance",
-    "naming-conventions",
+    "{MODULE_NAME}",
     "grpc",
     "typescript",
-    "quality-assurance"
+    "quality-assurance",
+    "analysis"
   ],
   "author": "Monks Sentinel",
   "license": "MIT",
@@ -56,5 +56,10 @@
   "engines": {
     "node": ">=18.0.0",
     "npm": ">=9.0.0"
-  }
+  },
+  "files": [
+    "dist/**/*",
+    "generated/**/*",
+    "README.md"
+  ]
 }

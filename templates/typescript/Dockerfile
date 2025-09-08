@@ -1,5 +1,9 @@
-# Multi-stage Dockerfile for GTM Governance Analyzer gRPC Server (TypeScript)
+# Multi-stage Dockerfile for GTM {MODULE_NAME.title()} Analyzer gRPC Server (TypeScript)
 # Optimized for production deployment with security best practices
+#
+# Template placeholders:
+# - {MODULE_NAME}: Module name for container labels and environment
+# - {PORT}: gRPC server port (e.g., 50052, 50053, 50054)
 
 # Build stage
 FROM node:18-alpine AS builder
@@ -62,18 +66,26 @@ COPY --from=builder --chown=nodejs:nodejs /app/package.json ./
 # Switch to non-root user
 USER nodejs
 
-# Expose gRPC port 50052 (Module 2 gRPC port)
-EXPOSE 50052
+# Expose gRPC port
+EXPOSE {PORT}
 
 # Environment variables for gRPC server
 ENV NODE_ENV=production
-ENV PORT=50052
+ENV MODULE_NAME={MODULE_NAME}
+ENV PORT={PORT}
 ENV HOST=0.0.0.0
 ENV LOG_LEVEL=info
 
 # Health check for gRPC server using grpc_health_probe
 HEALTHCHECK --interval=15s --timeout=5s --start-period=45s --retries=5 \
-  CMD grpc_health_probe -addr=localhost:50052 || exit 1
+  CMD grpc_health_probe -addr=localhost:{PORT} || exit 1
+
+# Container labels for identification
+LABEL org.opencontainers.image.title="GTM {MODULE_NAME.title()} Analyzer"
+LABEL org.opencontainers.image.description="gRPC microservice for GTM {MODULE_NAME} analysis"
+LABEL org.opencontainers.image.source="https://github.com/monks-sentinel/gtm-quality-system"
+LABEL org.opencontainers.image.vendor="Monks Sentinel"
+LABEL org.opencontainers.image.version="1.0.0"
 
 # Start the application
 CMD ["node", "dist/main.js"]

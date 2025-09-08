@@ -4,7 +4,3 @@ grpcio-health-checking>=1.60.0
 grpcio-reflection>=1.60.0
 protobuf>=4.25.0
 pydantic>=2.10.0
-
-# Commented out FastAPI dependencies (keep for potential rollback)
-# fastapi==0.104.1
-# uvicorn[standard]==0.24.0

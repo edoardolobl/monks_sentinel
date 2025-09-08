@@ -1,9 +1,16 @@
 """
-gRPC server for GTM associations analysis.
+gRPC server for GTM {MODULE_NAME} analysis.
 
-Converted from FastAPI to gRPC while maintaining all existing functionality.
-This module receives protobuf requests and returns association analysis results
-using the existing AssociationsAnalyzer logic.
+This template provides a complete gRPC server implementation for GTM analysis modules.
+Replace placeholders with your specific module implementation details.
+
+Template placeholders:
+- {MODULE_NAME}: Module name (e.g., "associations", "governance", "javascript", "html")
+- {MODULE_CLASS}: Analyzer class name (e.g., "AssociationsAnalyzer", "JavaScriptAnalyzer")
+- {SERVICE_NAME}: gRPC service name (e.g., "AssociationsAnalysisService", "JavaScriptAnalysisService")
+- {PROTO_REQUEST}: Proto request message name (e.g., "AssociationsAnalysisRequest")
+- {PROTO_SERVICE}: Proto service class (e.g., "AssociationsAnalysisServiceServicer")
+- {PORT}: gRPC server port (e.g., 50051, 50052, 50053, 50054)
 """
 
 import asyncio
@@ -29,8 +36,8 @@ except ImportError as e:
     print("Make sure the generated protobuf files are available in /generated/python/")
     sys.exit(1)
 
-# Import existing analyzer and models
-from associations_analyzer import AssociationsAnalyzer
+# Import your analyzer and models (replace with actual imports)
+from {MODULE_NAME}_analyzer import {MODULE_CLASS}
 from models import TestIssue, ModuleResult
 
 # Configure logging
@@ -38,41 +45,42 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class AssociationsAnalysisServicer(gtm_analysis_pb2_grpc.AssociationsAnalysisServiceServicer):
+class {SERVICE_NAME}Servicer(gtm_analysis_pb2_grpc.{PROTO_SERVICE}):
     """
-    gRPC service implementation for GTM associations analysis.
+    gRPC service implementation for GTM {MODULE_NAME} analysis.
     
-    Implements the AssociationsAnalysisService defined in the protobuf file.
-    Uses the existing AssociationsAnalyzer for all analysis logic.
+    Implements the {SERVICE_NAME} defined in the protobuf file.
+    Uses the existing {MODULE_CLASS} for all analysis logic.
     """
 
-    def AnalyzeAssociations(self, request: gtm_analysis_pb2.AssociationsAnalysisRequest, context):
+    def Analyze{MODULE_NAME.title()}(self, request: gtm_analysis_pb2.{PROTO_REQUEST}, context):
         """
-        Analyze GTM container for association issues.
+        Analyze GTM container for {MODULE_NAME} issues.
         
         Args:
-            request: AssociationsAnalysisRequest protobuf message
+            request: {PROTO_REQUEST} protobuf message
             context: gRPC service context
             
         Returns:
             ModuleResult protobuf message with analysis results
         """
         try:
-            logger.info(f"Received associations analysis request: {request.request_id}")
+            logger.info(f"Received {MODULE_NAME} analysis request: {request.request_id}")
             
             # Convert protobuf request to plain JSON format for existing analyzer
             data = self._convert_protobuf_to_json(request)
             
             # Initialize analyzer with converted data
-            analyzer = AssociationsAnalyzer(data)
+            analyzer = {MODULE_CLASS}(data)
             
-            # Run associations analysis
+            # Run analysis
             issues = analyzer.analyze_all()
             
             # Calculate summary statistics
             summary = {
                 "total_issues": len(issues),
                 "critical": len([i for i in issues if i.severity == "critical"]),
+                "high": len([i for i in issues if i.severity == "high"]),
                 "medium": len([i for i in issues if i.severity == "medium"]),
                 "low": len([i for i in issues if i.severity == "low"])
             }
@@ -81,7 +89,7 @@ class AssociationsAnalysisServicer(gtm_analysis_pb2_grpc.AssociationsAnalysisSer
             
             # Create ModuleResult (Pydantic model)
             result = ModuleResult(
-                module="associations",
+                module="{MODULE_NAME}",
                 status="success", 
                 issues=issues,
                 summary=summary
@@ -96,7 +104,7 @@ class AssociationsAnalysisServicer(gtm_analysis_pb2_grpc.AssociationsAnalysisSer
             
             # Return error result
             error_result = ModuleResult(
-                module="associations",
+                module="{MODULE_NAME}",
                 status="error",
                 issues=[],
                 summary={"error": error_msg}
@@ -106,7 +114,7 @@ class AssociationsAnalysisServicer(gtm_analysis_pb2_grpc.AssociationsAnalysisSer
 
     def CheckHealth(self, request: gtm_analysis_pb2.HealthRequest, context):
         """
-        Health check endpoint for the associations analysis service.
+        Health check endpoint for the {MODULE_NAME} analysis service.
         
         Args:
             request: HealthRequest protobuf message
@@ -120,12 +128,12 @@ class AssociationsAnalysisServicer(gtm_analysis_pb2_grpc.AssociationsAnalysisSer
             
             response = gtm_analysis_pb2.HealthResponse()
             response.status = gtm_analysis_pb2.HealthResponse.Status.SERVING
-            response.message = "Associations Analysis Service is healthy"
+            response.message = "{MODULE_NAME.title()} Analysis Service is healthy"
             
             # Add some metadata
-            response.metadata["service"] = "gtm-associations-analyzer"
+            response.metadata["service"] = "gtm-{MODULE_NAME}-analyzer"
             response.metadata["version"] = "1.0.0"
-            response.metadata["module"] = "associations"
+            response.metadata["module"] = "{MODULE_NAME}"
             
             return response
             
@@ -138,56 +146,26 @@ class AssociationsAnalysisServicer(gtm_analysis_pb2_grpc.AssociationsAnalysisSer
             
             return response
 
-    def _convert_protobuf_to_json(self, request: gtm_analysis_pb2.AssociationsAnalysisRequest) -> Dict[str, Any]:
+    def _convert_protobuf_to_json(self, request: gtm_analysis_pb2.{PROTO_REQUEST}) -> Dict[str, Any]:
         """
         Convert protobuf request to plain JSON format expected by existing analyzer.
         
+        TODO: Customize this method based on your specific protobuf request structure.
+        This is a template - modify according to your {PROTO_REQUEST} fields.
+        
         Args:
-            request: AssociationsAnalysisRequest protobuf message
+            request: {PROTO_REQUEST} protobuf message
             
         Returns:
-            Dictionary with tags, triggers, variables, builtin_variables
+            Dictionary with converted data
         """
+        # TEMPLATE: Replace with your specific conversion logic
         data = {
-            "tags": [],
-            "triggers": [],
-            "variables": [],
-            "builtin_variables": []
+            # Example conversions - customize for your module
+            # "tags": [{"id": tag.id, "name": tag.name} for tag in request.tags],
+            # "triggers": [{"id": trigger.id, "name": trigger.name} for trigger in request.triggers],
+            # Add your specific fields here
         }
-        
-        # Convert tags
-        for tag in request.tags:
-            data["tags"].append({
-                "id": tag.id,
-                "name": tag.name,
-                "type": tag.type,
-                "firing_triggers": list(tag.firing_triggers),
-                "blocking_triggers": list(tag.blocking_triggers),
-                "variable_references": list(tag.variable_references)
-            })
-        
-        # Convert triggers
-        for trigger in request.triggers:
-            data["triggers"].append({
-                "id": trigger.id,
-                "name": trigger.name,
-                "type": trigger.type
-            })
-        
-        # Convert variables
-        for variable in request.variables:
-            data["variables"].append({
-                "id": variable.id,
-                "name": variable.name,
-                "type": variable.type
-            })
-        
-        # Convert builtin variables
-        for builtin_var in request.builtin_variables:
-            data["builtin_variables"].append({
-                "name": builtin_var.name,
-                "type": builtin_var.type
-            })
         
         return data
 
@@ -218,7 +196,7 @@ class AssociationsAnalysisServicer(gtm_analysis_pb2_grpc.AssociationsAnalysisSer
             pb_issue.type = issue.type
             pb_issue.message = issue.message
             pb_issue.recommendation = issue.recommendation
-            pb_issue.module = "associations"
+            pb_issue.module = "{MODULE_NAME}"
             
             # Set severity
             if issue.severity == "critical":
@@ -255,7 +233,7 @@ async def serve():
     """
     Start the gRPC server with proper configuration.
     """
-    # Create the gRPC server
+    # Create the gRPC server with async support
     server = grpc.aio.server(
         futures.ThreadPoolExecutor(max_workers=10),
         options=[
@@ -268,25 +246,25 @@ async def serve():
         ]
     )
 
-    # Add the associations analysis service
-    associations_servicer = AssociationsAnalysisServicer()
-    gtm_analysis_pb2_grpc.add_AssociationsAnalysisServiceServicer_to_server(
-        associations_servicer, server
+    # Add the {MODULE_NAME} analysis service
+    {MODULE_NAME}_servicer = {SERVICE_NAME}Servicer()
+    gtm_analysis_pb2_grpc.add_{PROTO_SERVICE}_to_server(
+        {MODULE_NAME}_servicer, server
     )
 
     # Add health check service
     health_servicer = HealthServicer()
     health_pb2_grpc.add_HealthServicer_to_server(health_servicer, server)
     
-    # Set health status for the associations service
-    health_servicer.set("gtm.analysis.v1.AssociationsAnalysisService", health_pb2.HealthCheckResponse.SERVING)
+    # Set health status for the service
+    health_servicer.set("gtm.analysis.v1.{SERVICE_NAME}", health_pb2.HealthCheckResponse.SERVING)
     health_servicer.set("", health_pb2.HealthCheckResponse.SERVING)  # Overall server health
 
     # Enable reflection for easier debugging (optional)
     try:
         from grpc_reflection.v1alpha import reflection
         SERVICE_NAMES = (
-            gtm_analysis_pb2.DESCRIPTOR.services_by_name['AssociationsAnalysisService'].full_name,
+            gtm_analysis_pb2.DESCRIPTOR.services_by_name['{SERVICE_NAME}'].full_name,
             health_pb2.DESCRIPTOR.services_by_name['Health'].full_name,
             reflection.SERVICE_NAME,
         )
@@ -296,7 +274,7 @@ async def serve():
         logger.warning("Server reflection not available")
 
     # Bind to port
-    listen_addr = '0.0.0.0:50051'
+    listen_addr = '0.0.0.0:{PORT}'
     server.add_insecure_port(listen_addr)
     
     # Start server

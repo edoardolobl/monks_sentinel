@@ -37,8 +37,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
-    # Production command with multiple workers
-    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2", "--worker-class", "uvicorn.workers.UvicornWorker"]
+    # Production command for gRPC server
+    command: ["python", "main.py"]
 
   gtm-module-associations:
     # Production-specific settings
@@ -74,8 +74,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
-    # Production command with optimized settings
-    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "1", "--worker-class", "uvicorn.workers.UvicornWorker"]
+    # Production command for gRPC server
+    command: ["python", "main.py"]
 
 # Production volumes with specific configurations
 volumes:
