@@ -29,9 +29,8 @@ except ImportError as e:
     print("Make sure the generated protobuf files are available in /generated/python/")
     sys.exit(1)
 
-# Import existing analyzer and models
-from associations_analyzer import AssociationsAnalyzer
-from models import TestIssue, ModuleResult
+# Import existing analyzer and TestIssue
+from associations_analyzer import AssociationsAnalyzer, TestIssue
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -79,30 +78,56 @@ class AssociationsAnalysisServicer(gtm_analysis_pb2_grpc.AssociationsAnalysisSer
             
             logger.info(f"Analysis completed: found {len(issues)} issues")
             
-            # Create ModuleResult (Pydantic model)
-            result = ModuleResult(
-                module="associations",
-                status="success", 
-                issues=issues,
-                summary=summary
-            )
+            # Create protobuf response directly
+            result = gtm_analysis_pb2.ModuleResult()
+            result.module = "associations"
+            result.status = gtm_analysis_pb2.ModuleResult.Status.SUCCESS
             
-            # Convert to protobuf response
-            return self._convert_result_to_protobuf(result)
+            # Convert issues to protobuf
+            for issue in issues:
+                pb_issue = gtm_analysis_pb2.TestIssue()
+                pb_issue.type = issue.type
+                pb_issue.message = issue.message
+                pb_issue.recommendation = issue.recommendation
+                pb_issue.module = "associations"
+                
+                # Set severity
+                if issue.severity == "critical":
+                    pb_issue.severity = gtm_analysis_pb2.TestIssue.Severity.CRITICAL
+                elif issue.severity == "high":
+                    pb_issue.severity = gtm_analysis_pb2.TestIssue.Severity.HIGH
+                elif issue.severity == "medium":
+                    pb_issue.severity = gtm_analysis_pb2.TestIssue.Severity.MEDIUM
+                elif issue.severity == "low":
+                    pb_issue.severity = gtm_analysis_pb2.TestIssue.Severity.LOW
+                else:
+                    pb_issue.severity = gtm_analysis_pb2.TestIssue.Severity.SEVERITY_UNSPECIFIED
+                
+                # Convert element dictionary to protobuf map
+                if issue.element:
+                    for key, value in issue.element.items():
+                        pb_issue.element[key] = str(value)
+                
+                result.issues.append(pb_issue)
+            
+            # Set summary
+            for key, value in summary.items():
+                if isinstance(value, int):
+                    result.summary[key] = value
+            
+            return result
             
         except Exception as e:
             error_msg = f"Analysis error: {str(e)}"
             logger.error(f"Analysis error: {e}")
             
             # Return error result
-            error_result = ModuleResult(
-                module="associations",
-                status="error",
-                issues=[],
-                summary={"error": error_msg}
-            )
+            error_result = gtm_analysis_pb2.ModuleResult()
+            error_result.module = "associations"
+            error_result.status = gtm_analysis_pb2.ModuleResult.Status.ERROR
+            error_result.error_message = error_msg
             
-            return self._convert_result_to_protobuf(error_result)
+            return error_result
 
     def CheckHealth(self, request: gtm_analysis_pb2.HealthRequest, context):
         """
@@ -191,64 +216,6 @@ class AssociationsAnalysisServicer(gtm_analysis_pb2_grpc.AssociationsAnalysisSer
         
         return data
 
-    def _convert_result_to_protobuf(self, result: ModuleResult) -> gtm_analysis_pb2.ModuleResult:
-        """
-        Convert Pydantic ModuleResult to protobuf ModuleResult.
-        
-        Args:
-            result: Pydantic ModuleResult object
-            
-        Returns:
-            Protobuf ModuleResult message
-        """
-        pb_result = gtm_analysis_pb2.ModuleResult()
-        pb_result.module = result.module
-        
-        # Set status
-        if result.status == "success":
-            pb_result.status = gtm_analysis_pb2.ModuleResult.Status.SUCCESS
-        elif result.status == "error":
-            pb_result.status = gtm_analysis_pb2.ModuleResult.Status.ERROR
-        else:
-            pb_result.status = gtm_analysis_pb2.ModuleResult.Status.STATUS_UNSPECIFIED
-        
-        # Convert issues
-        for issue in result.issues:
-            pb_issue = gtm_analysis_pb2.TestIssue()
-            pb_issue.type = issue.type
-            pb_issue.message = issue.message
-            pb_issue.recommendation = issue.recommendation
-            pb_issue.module = "associations"
-            
-            # Set severity
-            if issue.severity == "critical":
-                pb_issue.severity = gtm_analysis_pb2.TestIssue.Severity.CRITICAL
-            elif issue.severity == "high":
-                pb_issue.severity = gtm_analysis_pb2.TestIssue.Severity.HIGH
-            elif issue.severity == "medium":
-                pb_issue.severity = gtm_analysis_pb2.TestIssue.Severity.MEDIUM
-            elif issue.severity == "low":
-                pb_issue.severity = gtm_analysis_pb2.TestIssue.Severity.LOW
-            else:
-                pb_issue.severity = gtm_analysis_pb2.TestIssue.Severity.SEVERITY_UNSPECIFIED
-            
-            # Convert element dictionary to protobuf map
-            if issue.element:
-                for key, value in issue.element.items():
-                    pb_issue.element[key] = str(value)
-            
-            pb_result.issues.append(pb_issue)
-        
-        # Convert summary
-        if result.summary:
-            for key, value in result.summary.items():
-                if isinstance(value, int):
-                    pb_result.summary[key] = value
-                else:
-                    # For non-integer values like error messages, skip or handle specially
-                    logger.debug(f"Skipping non-integer summary value: {key}={value}")
-        
-        return pb_result
 
 
 async def serve():

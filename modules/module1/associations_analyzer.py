@@ -8,14 +8,24 @@ This module analyzes GTM containers for:
 4. Built-in variables: Used in variable references but not enabled in builtInVariable[]
 5. Setup/Blocking tags: Basic validation that referenced IDs exist
 
-With the API Gateway pattern, this module now receives plain JSON objects from the core
-orchestrator rather than complex Pydantic models, simplifying the data handling.
+This module receives plain JSON objects from the core orchestrator via gRPC, 
+simplifying the data handling while maintaining all existing functionality.
 Returns structured results with clear issue descriptions for easy JSON serialization.
 """
 
 import re
 from typing import List, Dict, Set, Any
-from models import TestIssue
+from dataclasses import dataclass
+
+
+@dataclass
+class TestIssue:
+    """Simple data class for test issues - replaces Pydantic model."""
+    type: str
+    severity: str
+    element: Dict[str, Any]
+    message: str
+    recommendation: str
 
 
 def extract_variable_references(text: str) -> List[str]:
@@ -330,7 +340,7 @@ if __name__ == "__main__":
         with open("GTM-N6X9DBL_workspace677.json", "r") as f:
             gtm_data = json.load(f)
         
-        # Extract simple data structure (this would normally be done by API Gateway)
+        # Extract simple data structure (this would normally be done by orchestrator)
         simple_data = {
             'tags': gtm_data.get('containerVersion', {}).get('tag', []),
             'triggers': gtm_data.get('containerVersion', {}).get('trigger', []),

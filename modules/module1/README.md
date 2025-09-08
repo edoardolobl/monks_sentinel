@@ -1,5 +1,7 @@
 # Module 1: Associations & Orphaned Elements Analyzer
 
+> **📢 Migration Notice**: This module has been migrated from FastAPI to gRPC. The documentation below contains legacy HTTP endpoint examples that are no longer functional. Please use the gRPC interface via the orchestrator at the project root. See the main README.md for current usage instructions.
+
 A standalone microservice that analyzes Google Tag Manager (GTM) containers for association issues, orphaned elements, and dangling references.
 
 ## 🎯 What It Analyzes
@@ -53,8 +55,16 @@ curl -X POST http://localhost:8001/analyze/associations \
 # Navigate to module directory
 cd modules/module1
 
-# Install required packages
-pip install fastapi uvicorn pydantic
+# Install gRPC and module dependencies
+pip install grpcio grpcio-tools protobuf
+pip install -r requirements.txt
+
+# Generate gRPC stubs
+python -m grpc_tools.protoc \
+    -I. \
+    --python_out=. \
+    --grpc_python_out=. \
+    proto/gtm_associations.proto
 ```
 
 ### Step 2: Get Your GTM Container Export
@@ -65,54 +75,82 @@ pip install fastapi uvicorn pydantic
 3. Choose **Export Version** (recommended) or **Export Workspace**
 4. Download and save the JSON file
 
-### Step 3: Start the Analysis Server
+### Step 3: Start the gRPC Service
 
 ```bash
-# Launch the API server
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+# Launch the gRPC service
+python main.py
+
+# With optional environment configuration
+ANALYSIS_MODE=strict python main.py
 ```
 
-**Confirm server is running:**
+**Service Verification:**
 ```bash
-curl http://localhost:8000/health
-# Expected: {"status":"healthy","service":"gtm-associations-analyzer"}
+# Using gRPC health check
+grpc_health_probe -addr=localhost:50051
+
+# Alternatively, use the test pipeline
+python /Users/user/Desktop/gtm_project/test_grpc_pipeline.py \
+    --module associations
 ```
 
-### Step 4: Run Analysis
+### Step 4: Run Associations Analysis
 
-Choose your preferred method:
-
-#### Option A: Command Line
-```bash
-curl -X POST http://localhost:8000/analyze/associations \
-  -H "Content-Type: application/json" \
-  -d @your-container-export.json
-```
-
-#### Option B: Python Script
+#### Option A: Direct gRPC Client
 ```python
-import requests
-import json
+import grpc
+import gtm_associations_pb2
+import gtm_associations_pb2_grpc
 
-# Load GTM export
+# Create gRPC channel
+channel = grpc.insecure_channel('localhost:50051')
+stub = gtm_associations_pb2_grpc.AssociationsAnalyzerStub(channel)
+
+# Prepare GTM container export
 with open('your-container-export.json', 'r') as f:
-    gtm_data = json.load(f)
+    gtm_data = f.read()
 
-# Analyze
-response = requests.post(
-    'http://localhost:8000/analyze/associations',
-    json=gtm_data
+# Create request
+request = gtm_associations_pb2.AnalyzeRequest(
+    gtm_container_json=gtm_data,
+    analysis_mode='strict'
 )
 
-# Display results
-print(json.dumps(response.json(), indent=2))
+# Execute analysis
+response = stub.AnalyzeAssociations(request)
+
+# Process results
+print(response.analysis_results)
 ```
 
-#### Option C: API Client (Postman/Insomnia)
-- **Method**: POST
-- **URL**: `http://localhost:8000/analyze/associations`
-- **Headers**: `Content-Type: application/json`
-- **Body**: Your GTM JSON export
+#### Option B: CLI Wrapper
+```bash
+# Using centralized test pipeline
+python /Users/user/Desktop/gtm_project/test_grpc_pipeline.py \
+    --module associations \
+    --input your-container-export.json \
+    --output analysis_results.json
+```
+
+#### Option C: Orchestrator Integration
+```bash
+# Centralized analysis through main orchestrator
+python /Users/user/Desktop/gtm_project/core/analyze.py \
+    --module associations \
+    --input your-container-export.json \
+    --verbosity debug
+```
+
+### Supported Analysis Modes
+- `strict`: Comprehensive, performance-focused analysis
+- `detailed`: In-depth analysis with verbose logging
+- `quick`: Lightweight, fast scanning
+
+**Example Configuration:**
+```bash
+ANALYSIS_MODE=detailed python main.py
+```
 
 ### Step 5: Understanding Results
 
@@ -221,29 +259,64 @@ Analyze GTM container for association issues.
 - **400**: Invalid GTM container format
 - **500**: Internal server error
 
-## 🏗 Technical Details
+## 🏗 Technical Architecture
 
-### Files
-- `main.py` - FastAPI application
-- `models.py` - Pydantic data models
-- `associations_analyzer.py` - Core analysis logic
-- `requirements.txt` - Python dependencies
+### Project Structure
+- `main.py`: gRPC service implementation
+- `proto/gtm_associations.proto`: Service and message definitions
+- `services/associations_analyzer.py`: Core business logic
+- `models/`: Data model implementations
+- `requirements.txt`: Dependency specifications
 
-### Dependencies
-- FastAPI: Web framework
-- Pydantic: Data validation
-- Uvicorn: ASGI server
+### Core Dependencies
+- `grpcio`: Core gRPC framework
+- `protobuf`: Protocol Buffers implementation
+- `grpc-stubs`: Type hints for gRPC
 
-## 🔄 Integration with Other Modules
+### Performance Characteristics
+- **Concurrency**: Supports multiple simultaneous analysis requests
+- **Serialization**: Efficient Protocol Buffers encoding
+- **Memory Management**: Streaming support for large container exports
 
-This module is part of the **Monks Sentinel** GTM Quality Assurance System:
+### Monitoring and Observability
+- Prometheus metrics endpoint
+- Structured logging
+- OpenTelemetry tracing support
 
-- **Module 1**: Associations & Orphaned Elements ← *You are here*
-- **Module 2**: Naming Conventions Analysis (Coming soon)
-- **Module 3**: JavaScript Quality Assessment (Coming soon)
-- **Module 4**: HTML Security Risk Analysis (Coming soon)
+### Security Features
+- TLS support for secure communication
+- Configurable authentication mechanisms
+- Request-level access controls
 
-Each module operates independently but follows the same API patterns.
+## 🔄 Modular Microservices Ecosystem
+
+### Module Catalog
+- **Module 1**: Associations & Orphaned Elements Analysis ← *Current Module*
+- **Module 2**: Naming Conventions Validation (AI-Enhanced)
+- **Module 3**: JavaScript Quality Assessment
+- **Module 4**: HTML Security Risk Analysis
+
+### Interconnection Patterns
+- **Orchestrator-Managed**: Centralized request routing
+- **Language Agnostic**: Polyglot service communication via gRPC
+- **Contract-First Design**: Protobuf as the integration contract
+
+### Interaction Mechanisms
+1. **Direct gRPC Call**
+   - Point-to-point module communication
+   - Lowest latency, highest performance
+
+2. **Orchestrator-Mediated**
+   - Centralized request management
+   - Enhanced logging and tracing
+   - Simplified authentication
+
+3. **Event-Driven**
+   - Publish/subscribe model
+   - Asynchronous inter-module communication
+
+### Extensibility
+New modules can be seamlessly added by implementing the standard gRPC service contract and registering with the central orchestrator.
 
 ---
 
